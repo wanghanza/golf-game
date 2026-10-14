@@ -2,6 +2,7 @@
 //
 // States
 //   idle       not armed
+//   countdown  armed with a grace period so the player can grip the phone
 //   waitStill  armed, waiting for the player to hold still (address)
 //   ready      address detected; waiting for the swing to start
 //   swinging   motion in progress, buffering
@@ -52,9 +53,32 @@ export class SwingDetector {
     this.onState(s, info);
   }
 
-  arm() {
+  /**
+   * @param {Object} [opts]
+   * @param {number} [opts.delaySeconds] grace period before the stillness check
+   *   starts (pressing the on-screen button moves the phone).
+   */
+  arm({ delaySeconds = 0 } = {}) {
     this.stillSince = null;
+    if (delaySeconds > 0) {
+      this.countdownSeconds = delaySeconds;
+      this.countdownEnd = null;
+      this.setState('countdown', this.lastT);
+      return;
+    }
     this.setState('waitStill', this.lastT);
+  }
+
+  /** 0..1 progress of the stillness check while waiting for the address. */
+  get stillProgress() {
+    if (this.state !== 'waitStill' || this.stillSince === null) return 0;
+    return Math.min(1, (this.lastT - this.stillSince) / this.cfg.stillSeconds);
+  }
+
+  /** Seconds left in the countdown (null when not counting down). */
+  get countdownLeft() {
+    if (this.state !== 'countdown') return null;
+    return this.countdownEnd === null ? this.countdownSeconds : Math.max(0, this.countdownEnd - this.lastT);
   }
 
   disarm() {
@@ -75,6 +99,11 @@ export class SwingDetector {
     const aDev = Math.abs(Math.hypot(s.ax, s.ay, s.az) - G);
     const c = this.cfg;
     switch (this.state) {
+      case 'countdown': {
+        if (this.countdownEnd === null) this.countdownEnd = s.t + this.countdownSeconds;
+        if (s.t >= this.countdownEnd) this.arm();
+        break;
+      }
       case 'waitStill': {
         if (w < c.stillOmega && aDev < c.stillAccelDev) {
           if (this.stillSince === null) this.stillSince = s.t;

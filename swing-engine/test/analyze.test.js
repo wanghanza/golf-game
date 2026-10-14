@@ -137,3 +137,17 @@ test('preprocess flags clipping at the declared range', () => {
   const p = preprocess(s, { gyroRange: 34.9 });
   assert.ok(p.saturation.length > 0);
 });
+
+test('countdown delays the address check, then the swing is detected', () => {
+  const { samples } = generateSwing({ type: 'normal', seed: 3 });
+  const states = [];
+  const results = [];
+  const det = new SwingDetector({ onState: (s) => states.push(s), onSwing: (r) => results.push(r), config: { autoRearm: false } });
+  det.arm({ delaySeconds: 0.3 });
+  assert.equal(det.state, 'countdown');
+  for (const s of samples) det.push(s);
+  const last = samples.at(-1);
+  for (let i = 1; i <= 200; i++) det.push({ ...last, t: last.t + i / 200, gx: 0, gy: 0, gz: 0 });
+  assert.deepEqual(states.slice(0, 3), ['countdown', 'waitStill', 'ready']);
+  assert.equal(results.filter((r) => r.valid).length, 1);
+});
