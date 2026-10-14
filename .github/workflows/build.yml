@@ -1,0 +1,83 @@
+name: Build & test
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install JS dependencies
+        run: npm ci
+
+      - name: Engine unit tests (swing, physics, data tools)
+        run: npm test
+
+      - name: Build web game
+        run: npm run build:web
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v5
+
+      - name: Android unit tests + APK
+        working-directory: android-app
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon --stacktrace testDebugUnitTest assembleDebug
+
+      - name: Rename APK
+        id: apk
+        run: |
+          SHORT=$(echo "$GITHUB_SHA" | cut -c1-7)
+          NAME="GolfSwingReader-dev-${GITHUB_RUN_NUMBER}-${SHORT}.apk"
+          cp android-app/app/build/outputs/apk/debug/app-debug.apk "$NAME"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          ls -la "$NAME"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apk
+          path: ${{ steps.apk.outputs.name }}
+          retention-days: 14
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-test-reports
+          path: android-app/app/build/reports/tests/
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Publish development pre-release
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="dev-${GITHUB_REF_NAME//\//-}"
+          gh release delete "$TAG" --cleanup-tag --yes || true
+          gh release create "$TAG" "${{ steps.apk.outputs.name }}" \
+            --prerelease \
+            --target "$GITHUB_SHA" \
+            --title "개발 빌드 ($GITHUB_REF_NAME, ${GITHUB_SHA:0:7})" \
+            --notes "자동 개발 빌드입니다. 서명: 개발용 키 (android-app/keystore). 브랜치 $GITHUB_REF_NAME, 커밋 $GITHUB_SHA, 실행 #$GITHUB_RUN_NUMBER."

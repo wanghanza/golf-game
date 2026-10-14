@@ -1,0 +1,177 @@
+{
+  "schema": "golf-swing-reader/recording@1",
+  "id": "synthetic_half",
+  "participantId": "synthetic",
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "synthetic": true,
+  "swingType": "half",
+  "swingTypeLabel": "half",
+  "intentionNote": "swingType는 사용자가 의도한 스윙 유형이며 실제 구질 측정값이 아님",
+  "sampleCount": 912,
+  "durationSeconds": 4.5551900000000005,
+  "measuredRateHz": 200.00000000000426,
+  "units": {
+    "t": "s",
+    "accel": "m/s^2 (includes gravity)",
+    "gyro": "rad/s"
+  },
+  "coordinateSystem": "Android device frame (x right, y up along long edge, z out of screen)",
+  "device": {
+    "model": "synthetic generator"
+  },
+  "quality": {
+    "gaps": [],
+    "saturation": [],
+    "hasAddress": true
+  },
+  "analysis": {
+    "valid": true,
+    "reason": null,
+    "phases": {
+      "address": [
+        0.4848,
+        0.9848
+      ],
+      "backswing": [
+        1.0098,
+        2.0398
+      ],
+      "top": 2.0398,
+      "downswing": [
+        2.0398,
+        2.473075130922068
+      ],
+      "impact": 2.473075130922068,
+      "finish": [
+        2.473075130922068,
+        2.9598
+      ]
+    },
+    "features": {
+      "sampleRateHz": {
+        "value": 200.00000000000426,
+        "unit": "Hz",
+        "source": "measured"
+      },
+      "peakOmega": {
+        "value": 8.528521125377884,
+        "unit": "rad/s",
+        "source": "measured",
+        "note": "자이로 크기 최댓값"
+      },
+      "peakAccel": {
+        "value": 47.301210405677544,
+        "unit": "m/s^2",
+        "source": "measured",
+        "note": "가속도 크기 최댓값 (중력 포함)"
+      },
+      "peakOmegaInPlane": {
+        "value": 8.030458645387538,
+        "unit": "rad/s",
+        "source": "derived",
+        "note": "스윙 평면 각속도 최댓값"
+      },
+      "omegaAtImpact": {
+        "value": 7.72087041688959,
+        "unit": "rad/s",
+        "source": "derived"
+      },
+      "backswingDuration": {
+        "value": 1.03,
+        "unit": "s",
+        "source": "derived"
+      },
+      "downswingDuration": {
+        "value": 0.43327513092206793,
+        "unit": "s",
+        "source": "derived"
+      },
+      "tempoRatio": {
+        "value": 2.377242372088195,
+        "unit": "ratio",
+        "source": "derived",
+        "note": "백스윙:다운스윙 시간 비"
+      },
+      "backswingAngle": {
+        "value": 107.71191428202701,
+        "unit": "deg",
+        "source": "derived",
+        "note": "스윙 평면 내 회전각"
+      },
+      "followThroughAngle": {
+        "value": 112.01991591112193,
+        "unit": "deg",
+        "source": "derived"
+      },
+      "planeTilt": {
+        "value": 71.27557459150802,
+        "unit": "deg",
+        "source": "derived",
+        "note": "스윙 평면 축과 수직선 사이 각"
+      },
+      "impactTime": {
+        "value": 2.473075130922068,
+        "unit": "s",
+        "source": "estimated",
+        "note": "가상 임팩트: 어드레스 각도로 복귀한 시점"
+      },
+      "handSpeed": {
+        "value": 4.6325222501337535,
+        "unit": "m/s",
+        "source": "estimated",
+        "note": "팔 길이 0.6 m 가정"
+      },
+      "faceRollDeg": {
+        "value": -0.09614367847893736,
+        "unit": "deg",
+        "source": "estimated",
+        "note": "임팩트 시 휴대폰 장축 회전 (페이스 추정용, 미검증)"
+      },
+      "planeShiftDeg": {
+        "value": 0.41635254561158774,
+        "unit": "deg",
+        "source": "estimated",
+        "note": "백스윙 대비 다운스윙 평면 방위 변화 (경로 추정용, 미검증)"
+      },
+      "qualityScore": {
+        "value": 0.7919166303520294,
+        "unit": "0-1",
+        "source": "estimated"
+      }
+    }
+  },
+  "notes": "합성(가상) 데이터입니다. 실제 측정값이 아닙니다.",
+  "generator": {
+    "synthetic": true,
+    "generator": "data-tools/src/synth.js",
+    "swingType": "half",
+    "swingTypeLabel": "하프 스윙",
+    "seed": 1,
+    "rateHz": 200,
+    "units": {
+      "t": "s",
+      "accel": "m/s^2 (includes gravity)",
+      "gyro": "rad/s"
+    },
+    "coordinateSystem": "Android device frame (x right, y up along long edge, z out of screen)",
+    "params": {
+      "peakOmega": 8,
+      "tempo": 3,
+      "topDeg": 110,
+      "finishDeg": 120,
+      "faceRollDeg": 0,
+      "planeShiftDeg": 0
+    },
+    "truth": {
+      "addressEnd": 0.9254147881176323,
+      "top": 2.039,
+      "impact": 2.4801446109312053,
+      "peakOmegaTime": 2.416,
+      "forearmRollDeg": 0,
+      "faceTwistDeg": 0.18234691979144152,
+      "planeShiftDeg": 0,
+      "peakOmega": 7.999985965598703,
+      "backswingDeg": 110.00003148218131
+    }
+  }
+}

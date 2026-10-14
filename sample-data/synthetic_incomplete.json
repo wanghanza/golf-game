@@ -1,0 +1,77 @@
+{
+  "schema": "golf-swing-reader/recording@1",
+  "id": "synthetic_incomplete",
+  "participantId": "synthetic",
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "synthetic": true,
+  "swingType": "incomplete",
+  "swingTypeLabel": "불완전한 스윙",
+  "intentionNote": "swingType는 사용자가 의도한 스윙 유형이며 실제 구질 측정값이 아님",
+  "sampleCount": 1574,
+  "durationSeconds": 7.86512,
+  "measuredRateHz": 200.00000000000426,
+  "units": {
+    "t": "s",
+    "accel": "m/s^2 (includes gravity)",
+    "gyro": "rad/s"
+  },
+  "coordinateSystem": "Android device frame (x right, y up along long edge, z out of screen)",
+  "device": {
+    "model": "synthetic generator"
+  },
+  "quality": {
+    "gaps": [],
+    "saturation": [],
+    "hasAddress": true
+  },
+  "analysis": {
+    "valid": false,
+    "reason": "incomplete_swing",
+    "phases": {
+      "address": [
+        0.5398000000000001,
+        1.0398
+      ],
+      "backswing": [
+        1.0798,
+        2.9148
+      ],
+      "top": 2.9148
+    },
+    "features": null
+  },
+  "notes": "합성(가상) 데이터입니다. 실제 측정값이 아닙니다.",
+  "generator": {
+    "synthetic": true,
+    "generator": "data-tools/src/synth.js",
+    "swingType": "incomplete",
+    "swingTypeLabel": "불완전한 스윙 (다운스윙 중단)",
+    "seed": 1,
+    "rateHz": 200,
+    "units": {
+      "t": "s",
+      "accel": "m/s^2 (includes gravity)",
+      "gyro": "rad/s"
+    },
+    "coordinateSystem": "Android device frame (x right, y up along long edge, z out of screen)",
+    "params": {
+      "peakOmega": 6,
+      "tempo": 3,
+      "topDeg": 200,
+      "finishDeg": 220,
+      "faceRollDeg": 0,
+      "planeShiftDeg": 0
+    },
+    "truth": {
+      "addressEnd": 0.9254147881176323,
+      "top": 2.926,
+      "impact": null,
+      "peakOmegaTime": 3.265,
+      "forearmRollDeg": 0,
+      "faceTwistDeg": null,
+      "planeShiftDeg": 0,
+      "peakOmega": 4.112325468539608,
+      "backswingDeg": 200.000018770081
+    }
+  }
+}

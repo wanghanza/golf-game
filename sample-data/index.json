@@ -1,0 +1,75 @@
+{
+  "synthetic": true,
+  "recordings": [
+    {
+      "id": "synthetic_normal",
+      "type": "normal",
+      "label": "정상 스윙",
+      "valid": true,
+      "reason": null
+    },
+    {
+      "id": "synthetic_draw",
+      "type": "draw",
+      "label": "드로 의도 스윙",
+      "valid": true,
+      "reason": null
+    },
+    {
+      "id": "synthetic_fade",
+      "type": "fade",
+      "label": "페이드 의도 스윙",
+      "valid": true,
+      "reason": null
+    },
+    {
+      "id": "synthetic_slow",
+      "type": "slow",
+      "label": "느린 스윙",
+      "valid": true,
+      "reason": null
+    },
+    {
+      "id": "synthetic_fast",
+      "type": "fast",
+      "label": "빠른 스윙",
+      "valid": true,
+      "reason": null
+    },
+    {
+      "id": "synthetic_half",
+      "type": "half",
+      "label": "하프 스윙",
+      "valid": true,
+      "reason": null
+    },
+    {
+      "id": "synthetic_incomplete",
+      "type": "incomplete",
+      "label": "불완전한 스윙 (다운스윙 중단)",
+      "valid": false,
+      "reason": "incomplete_swing"
+    },
+    {
+      "id": "synthetic_shake",
+      "type": "shake",
+      "label": "스윙이 아닌 손동작 (흔들기)",
+      "valid": false,
+      "reason": "shake"
+    },
+    {
+      "id": "synthetic_shock",
+      "type": "shock",
+      "label": "충격 포함 스윙 (낙하 모사)",
+      "valid": false,
+      "reason": "shock"
+    },
+    {
+      "id": "synthetic_saturated",
+      "type": "saturated",
+      "label": "센서 포화 스윙",
+      "valid": false,
+      "reason": "sensor_saturated"
+    }
+  ]
+}

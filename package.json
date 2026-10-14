@@ -1,0 +1,22 @@
+{
+  "name": "golf-swing-reader-game",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Smartphone-sensor golf swing reader and 3D driving-range game",
+  "type": "module",
+  "workspaces": [
+    "swing-engine",
+    "physics-engine",
+    "data-tools",
+    "web-game"
+  ],
+  "scripts": {
+    "test": "node --test \"swing-engine/test/*.test.js\" \"physics-engine/test/*.test.js\" \"data-tools/test/*.test.js\"",
+    "build:web": "npm run build -w web-game",
+    "dev": "npm run dev -w web-game",
+    "samples": "node data-tools/src/cli.js sample-data"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

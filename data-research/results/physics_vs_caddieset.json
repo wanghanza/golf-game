@@ -1,0 +1,101 @@
+{
+  "note": "Launch angle is not in CaddieSet; one angle per club is fitted. Errors are therefore optimistic.",
+  "clubs": {
+    "W1": {
+      "n": 1137,
+      "fittedLaunchAngleDeg": 17,
+      "carryMAE_m": 5.984113789223626,
+      "carryBias_m": 1.4748066284204138,
+      "carryCorrelation": 0.964153806526071,
+      "meanCarryData_m": 171.092436235708,
+      "totalMAE_m": 11.241820605190627,
+      "totalBias_m": 8.18157232146786,
+      "lateralCorrelation_simCarryLateral_vs_LrDistanceOut": 0.9865572029177822,
+      "lateralMAE_m": 1.9016060999672308
+    },
+    "I7": {
+      "n": 319,
+      "fittedLaunchAngleDeg": 14,
+      "carryMAE_m": 3.210683860669159,
+      "carryBias_m": 0.9856895451976778,
+      "carryCorrelation": 0.9578952269072308,
+      "meanCarryData_m": 125.69090909090912,
+      "totalMAE_m": 12.229996480350746,
+      "totalBias_m": 12.156289291476885,
+      "lateralCorrelation_simCarryLateral_vs_LrDistanceOut": 0.9789834054538605,
+      "lateralMAE_m": 1.2148202017755056
+    },
+    "I9": {
+      "n": 101,
+      "fittedLaunchAngleDeg": 13,
+      "carryMAE_m": 2.1786704422340786,
+      "carryBias_m": -0.5845489053389903,
+      "carryCorrelation": 0.9319957067398322,
+      "meanCarryData_m": 118.04158415841583,
+      "totalMAE_m": 12.237805837258442,
+      "totalBias_m": 12.237805837258442,
+      "lateralCorrelation_simCarryLateral_vs_LrDistanceOut": 0.9322143217916111,
+      "lateralMAE_m": 1.0304233640251061
+    },
+    "I5": {
+      "n": 41,
+      "fittedLaunchAngleDeg": 15,
+      "carryMAE_m": 4.106864212967545,
+      "carryBias_m": 1.1334163832834927,
+      "carryCorrelation": 0.9564039167626927,
+      "meanCarryData_m": 144.14634146341464,
+      "totalMAE_m": 14.677208400654475,
+      "totalBias_m": 14.677208400654475,
+      "lateralCorrelation_simCarryLateral_vs_LrDistanceOut": 0.7455776790314499,
+      "lateralMAE_m": 2.0015878075297127
+    },
+    "I6": {
+      "n": 28,
+      "fittedLaunchAngleDeg": 13,
+      "carryMAE_m": 4.443277724441862,
+      "carryBias_m": 2.121275606559958,
+      "carryCorrelation": 0.6798712652086527,
+      "meanCarryData_m": 137.04285714285712,
+      "totalMAE_m": 15.29943399627297,
+      "totalBias_m": 15.29943399627297,
+      "lateralCorrelation_simCarryLateral_vs_LrDistanceOut": 0.740196912541909,
+      "lateralMAE_m": 2.3501778856836313
+    },
+    "I4": {
+      "n": 40,
+      "fittedLaunchAngleDeg": 14,
+      "carryMAE_m": 3.2279841882398097,
+      "carryBias_m": 0.9546063390111904,
+      "carryCorrelation": 0.966538418773953,
+      "meanCarryData_m": 151.46999999999997,
+      "totalMAE_m": 14.389966134835031,
+      "totalBias_m": 14.170578354997138,
+      "lateralCorrelation_simCarryLateral_vs_LrDistanceOut": 0.9939715009694303,
+      "lateralMAE_m": 0.9007938104869379
+    },
+    "I8": {
+      "n": 45,
+      "fittedLaunchAngleDeg": 13,
+      "carryMAE_m": 2.7246993246338675,
+      "carryBias_m": 0.39420569552707907,
+      "carryCorrelation": 0.9421075502115818,
+      "meanCarryData_m": 123.4844444444444,
+      "totalMAE_m": 10.694119191522013,
+      "totalBias_m": 10.694119191522013,
+      "lateralCorrelation_simCarryLateral_vs_LrDistanceOut": 0.9787578740791324,
+      "lateralMAE_m": 1.2365529938288105
+    },
+    "W3": {
+      "n": 46,
+      "fittedLaunchAngleDeg": 15,
+      "carryMAE_m": 3.858946188392066,
+      "carryBias_m": 2.9504803675349076,
+      "carryCorrelation": 0.9846750997765722,
+      "meanCarryData_m": 177.56521739130437,
+      "totalMAE_m": 14.42236276043873,
+      "totalBias_m": 14.323757366325207,
+      "lateralCorrelation_simCarryLateral_vs_LrDistanceOut": 0.895610196764907,
+      "lateralMAE_m": 1.4483609786084115
+    }
+  }
+}
