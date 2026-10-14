@@ -83,6 +83,7 @@ export function createRecorderScreen(app) {
   });
 
   function onSample(s) {
+    if (live.length && s.t < live[live.length - 1].t) live.length = 0;
     live.push(s);
     while (live.length && live[0].t < s.t - 6) live.shift();
     if (recording) {
@@ -135,6 +136,7 @@ export function createRecorderScreen(app) {
     recBtn.disabled = false;
     stateEl.textContent = r.kind === 'native' ? '네이티브 센서 (안드로이드) 동작 중' : '브라우저 센서 동작 중 (정확도 제한)';
     renderInfo();
+    detector.analysis = sensors.analysisOptions();
     if (autoEl.checked) detector.arm();
   }
 
@@ -175,7 +177,7 @@ export function createRecorderScreen(app) {
     const t0 = rawSamples[0].t;
     const samples = rawSamples.map((s) => ({ ...s, t: s.t - t0 }));
     // Re-run analysis on the zero-based copy so phase times match the file.
-    const result = analyzeSwing(samples);
+    const result = analyzeSwing(samples, sensors.analysisOptions());
     const info = sensors.info();
     const meta = makeMetadata({
       id: newId(),

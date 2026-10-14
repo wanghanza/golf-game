@@ -132,6 +132,7 @@ export function createGameScreen(app) {
     banner.classList.remove('show');
     scene.resetBall();
     armBtn.textContent = '중지';
+    detector.analysis = sensors.analysisOptions();
     detector.arm();
   }
 

@@ -7,7 +7,7 @@ package com.wanghanza.golfswingreader
  * linearly interpolated to the gyroscope timestamp when the gyro event lies
  * between two accelerometer events, otherwise the latest accelerometer value
  * is used. Timestamps are converted from nanoseconds to seconds relative to
- * the first emitted sample.
+ * the first sample ever emitted, so time keeps increasing across stop/start.
  *
  * Pure Kotlin (no Android types) so it can be unit tested on the JVM.
  */
@@ -21,11 +21,10 @@ class SampleAssembler {
     var emitted = 0L
         private set
 
+    /** Forget the accelerometer state (e.g. after a restart). The time origin is kept. */
     fun reset() {
         prevAccT = Long.MIN_VALUE
         lastAccT = Long.MIN_VALUE
-        t0 = Long.MIN_VALUE
-        emitted = 0
     }
 
     fun onAccel(timestampNs: Long, x: Float, y: Float, z: Float) {

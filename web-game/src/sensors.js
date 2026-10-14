@@ -10,6 +10,7 @@ class RateMeter {
     this.times = [];
   }
   tick(t) {
+    if (this.times.length && t < this.times[this.times.length - 1]) this.times = [];
     this.times.push(t);
     while (this.times.length && this.times[0] < t - 2) this.times.shift();
   }
@@ -50,6 +51,14 @@ export class SensorHub {
   }
 
   _emit(s) {
+    // A new sensor session may restart the clock; drop samples that go back in time
+    // only if they overlap, otherwise let listeners see a fresh timeline.
+    if (this.lastT !== undefined && s.t < this.lastT - 0.5) {
+      for (const fn of this.statusListeners) fn({ timeReset: true });
+    } else if (this.lastT !== undefined && s.t <= this.lastT) {
+      return;
+    }
+    this.lastT = s.t;
     this.count++;
     this.meter.tick(s.t);
     for (const fn of this.listeners) {
@@ -137,6 +146,15 @@ export class SensorHub {
       window.removeEventListener('devicemotion', this._onMotion);
     }
     this.running = false;
+  }
+
+  /** Options for analyzeSwing: declared sensor ranges improve clipping detection. */
+  analysisOptions() {
+    const info = this.kind === 'native' ? this.info() : null;
+    const find = (prefix) => info?.sensors?.find((s) => String(s.type).startsWith(prefix))?.maxRange;
+    const accelRange = find('accelerometer');
+    const gyroRange = find('gyroscope');
+    return { preprocess: { accelRange: accelRange > 0 ? accelRange : null, gyroRange: gyroRange > 0 ? gyroRange : null } };
   }
 
   get rateHz() {

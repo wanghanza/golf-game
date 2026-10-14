@@ -62,6 +62,11 @@ export class SwingDetector {
   }
 
   push(s) {
+    if (this.buf.length && s.t < this.buf[this.buf.length - 1].t) {
+      // Clock restarted (new sensor session): start over.
+      this.buf = [];
+      if (this.state !== 'idle') this.arm();
+    }
     this.lastT = s.t;
     this.buf.push(s);
     const minT = s.t - this.cfg.bufferSeconds;

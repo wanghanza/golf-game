@@ -158,3 +158,4 @@ android-app/app/src/main/assets/web/
 data-research/.cache/
 __pycache__/
 *.apk
+data-research/results/caddieset_shots.json
