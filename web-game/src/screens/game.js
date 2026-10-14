@@ -12,7 +12,7 @@ import { shotFromAnalysis } from '../shot.js';
 import { vibrate, keepScreenOn } from '../platform.js';
 
 const STATE_TEXT = {
-  idle: ['스윙 준비를 누르세요', '휴대폰을 그립처럼 양손으로 잡고 손목 스트랩을 착용하세요'],
+  idle: ['스윙 준비를 누르세요', '휴대폰을 세로로 세워 긴 쪽이 샤프트 방향이 되게 양손으로 쥐고, 손목 스트랩을 착용하세요'],
   waitStill: ['어드레스 자세로 멈추세요', '움직이지 않고 0.4초 정지하면 준비됩니다'],
   ready: ['준비 완료 — 스윙하세요', '작고 부드러운 스윙으로도 충분합니다'],
   swinging: ['스윙 감지 중…', ''],
