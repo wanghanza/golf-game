@@ -29,14 +29,21 @@ export const DEFAULT_DETECTOR = Object.freeze({
   bufferSeconds: 8,
   cooldownSeconds: 1.2,
   autoRearm: true,
+  // Real-time impact estimate (sound cue)
+  liveReverseOmega: 1.0,
+  liveMinBackswingSeconds: 0.2,
+  liveMinBackswingRad: 0.6, // ~35 deg, same as the offline rule
+  liveMinPeakOmega: 3.0,
+  liveReturnFraction: 0.95,
 });
 
 export class SwingDetector {
-  constructor({ config = {}, analysis = {}, onState = () => {}, onSwing = () => {} } = {}) {
+  constructor({ config = {}, analysis = {}, onState = () => {}, onSwing = () => {}, onImpact = () => {} } = {}) {
     this.cfg = { ...DEFAULT_DETECTOR, ...config };
     this.analysis = analysis;
     this.onState = onState;
     this.onSwing = onSwing;
+    this.onImpact = onImpact;
     this.buf = [];
     this.state = 'idle';
     this.stateSince = 0;
@@ -120,6 +127,7 @@ export class SwingDetector {
         if (w > c.startOmega) {
           this.swingStart = s.t;
           this.quietSince = null;
+          this.live = { ref: [s.gx / w, s.gy / w, s.gz / w], top: null, peak: 0, fired: false, angle: 0, lastT: s.t };
           this.setState('swinging', s.t);
         } else if (w < c.stillOmega && aDev < c.stillAccelDev) {
           // Keep the address window fresh while the player waits.
@@ -130,13 +138,14 @@ export class SwingDetector {
         break;
       }
       case 'swinging': {
+        this.trackLiveImpact(s, w);
         if (w < c.endOmega) {
           if (this.quietSince === null) this.quietSince = s.t;
         } else {
           this.quietSince = null;
         }
         const elapsed = s.t - this.swingStart;
-        const settled = this.quietSince !== null && s.t - this.quietSince >= c.endQuietSeconds && elapsed >= c.minSwingSeconds;
+        const settled = this.quietSince !== null && s.t - this.quietSince >= this.quietNeeded && elapsed >= c.minSwingSeconds;
         if (settled || elapsed >= c.maxSwingSeconds) this.finish(s.t);
         break;
       }
@@ -150,6 +159,52 @@ export class SwingDetector {
       default:
         break;
     }
+  }
+
+  /**
+   * Real-time impact estimate, used only for instant feedback (the impact
+   * sound). Same principle as the offline analysis, approximated in the phone
+   * frame: the rotation about the takeaway axis is integrated going back;
+   * after the rotation reverses (top), the impact is when the phone has turned
+   * back through the same angle, i.e. returned to the address orientation.
+   * In the body frame a rotation about a near-fixed axis keeps its direction,
+   * so projecting on the takeaway direction is a good approximation. The
+   * authoritative impact time comes from analyzeSwing afterwards.
+   */
+  trackLiveImpact(s, w) {
+    const L = this.live;
+    if (!L || L.fired) return;
+    const c = this.cfg;
+    const proj = s.gx * L.ref[0] + s.gy * L.ref[1] + s.gz * L.ref[2];
+    const dt = Math.max(0, Math.min(0.05, s.t - L.lastT));
+    L.lastT = s.t;
+    if (L.top === null) {
+      if (proj > 0) L.angle += proj * dt;
+      if (proj < -c.liveReverseOmega && s.t - this.swingStart >= c.liveMinBackswingSeconds) {
+        // A real backswing turns the phone a long way before reversing; a
+        // wrist shake does not.
+        if (L.angle >= c.liveMinBackswingRad) {
+          L.top = s.t;
+          L.down = 0;
+        } else {
+          L.fired = true; // not a swing: stay silent
+        }
+      }
+      return;
+    }
+    L.down += -proj * dt;
+    L.peak = Math.max(L.peak, w);
+    if (L.down >= L.angle * c.liveReturnFraction && L.peak >= c.liveMinPeakOmega) {
+      L.fired = true;
+      this.onImpact({ t: s.t, peakOmega: L.peak, sinceTop: s.t - L.top });
+    }
+  }
+
+  /** Waiting at the top of a slow swing must not end the recording. */
+  get quietNeeded() {
+    const L = this.live;
+    const atTop = L && !L.fired && L.angle >= this.cfg.liveMinBackswingRad;
+    return atTop ? Math.max(this.cfg.endQuietSeconds, 1.5) : this.cfg.endQuietSeconds;
   }
 
   finish(t) {

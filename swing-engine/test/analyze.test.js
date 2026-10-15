@@ -151,3 +151,25 @@ test('countdown delays the address check, then the swing is detected', () => {
   assert.deepEqual(states.slice(0, 3), ['countdown', 'waitStill', 'ready']);
   assert.equal(results.filter((r) => r.valid).length, 1);
 });
+
+test('live impact cue fires once near the real impact, never for a shake or an aborted swing; slow swings complete', () => {
+  for (const [type, expected] of [['normal', 1], ['draw', 1], ['half', 1], ['slow', 1], ['shake', 0], ['incomplete', 0]]) {
+    const { samples, meta } = generateSwing({ type, seed: 5 });
+    const hits = [];
+    const det = new SwingDetector({ onImpact: (e) => hits.push(e), config: { autoRearm: false } });
+    det.arm();
+    const results = [];
+    det.onSwing = (r) => results.push(r);
+    for (const s of samples) det.push(s);
+    const last = samples.at(-1);
+    for (let i = 1; i <= 400; i++) det.push({ ...last, t: last.t + i / 200, gx: 0, gy: 0, gz: 0 });
+    assert.equal(hits.length, expected, type);
+    assert.equal(results.length, 1, `${type}: one analysis per motion`);
+    if (expected) assert.equal(results[0].valid, true, `${type}: ${results[0].reason}`);
+    if (expected) {
+      const err = hits[0].t - meta.truth.impact;
+      // Slightly early on purpose (5% before full return) to offset audio output latency.
+      assert.ok(err > -0.15 && err < 0.05, `${type}: live impact ${(err * 1000).toFixed(0)} ms from truth`);
+    }
+  }
+});

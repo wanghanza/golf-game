@@ -1,4 +1,5 @@
 import './style.css';
+import { unlockAudio } from './cues.js';
 import { createHomeScreen, createSettingsScreen, createSafetyScreen, createTvScreen } from './screens/info.js';
 import { createGameScreen } from './screens/game.js';
 import { createRecorderScreen } from './screens/recorder.js';
@@ -44,6 +45,9 @@ window.__golfBack = () => {
   app.show('home');
   return true;
 };
+
+// Browsers only allow audio after a user gesture: unlock on the first touch.
+document.addEventListener('pointerdown', unlockAudio, { passive: true });
 
 window.addEventListener('error', (e) => console.error('Uncaught', e.error || e.message));
 
