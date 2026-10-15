@@ -113,15 +113,25 @@ export function createGameScreen(app) {
       updateCue();
     },
     onSwing: (r) => handleResult(r, null),
+    // Real-time contact sound, as close to the virtual impact as possible.
+    onImpact: (e) => {
+      cues.impact({ club: settings.club, power: e.peakOmega / (settings.game.referenceOmega || 11) });
+      impactPlayed = true;
+    },
   });
+  let impactPlayed = false;
 
   function handleResult(r, label) {
     if (!r.valid) {
       setStatus('발사하지 않음', REASON_TEXT[r.reason] ?? r.reason);
       if (!label) cues.rejected();
+      impactPlayed = false;
       return;
     }
-    if (!label) cues.launched();
+    const { shot: preview } = shotFromAnalysis(r, settings.club);
+    // Live swings already heard the contact; replays hear it at launch.
+    if (!impactPlayed) cues.impact({ club: settings.club, power: preview.delivery.power, quality: preview.delivery.strikeQuality });
+    impactPlayed = false;
     const { shot, flight, features } = shotFromAnalysis(r, settings.club);
     banner.textContent = label ? `시뮬레이션 재생: ${label} (실측 아님)` : '';
     banner.classList.toggle('show', !!label);
@@ -190,6 +200,7 @@ export function createGameScreen(app) {
 
   let sampleSeed = 1;
   function sampleSwing() {
+    unlockAudio();
     const types = ['normal', 'draw', 'fade', 'half', 'fast'];
     const type = types[(sampleSeed - 1) % types.length];
     const { samples, meta } = generateSwing({ type, seed: sampleSeed++ });
