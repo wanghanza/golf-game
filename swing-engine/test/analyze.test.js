@@ -34,7 +34,7 @@ test('slow swing is accepted with a looser impact tolerance', () => {
   assert.ok(Math.abs(r.phases.impact - meta.truth.impact) < 0.05);
 });
 
-const REJECT = { incomplete: 'incomplete_swing', shake: 'shake', shock: 'shock', saturated: 'sensor_saturated' };
+const REJECT = { incomplete: 'incomplete_swing', shake: 'shake', shock: 'shock' };
 for (const [type, reason] of Object.entries(REJECT)) {
   test(`synthetic ${type} motion is rejected (${reason})`, () => {
     for (const seed of [1, 2]) {
@@ -319,4 +319,52 @@ test('transition and acceleration zone: drop, early/late acceleration, throw fro
   assert.ok(normal.lagRetention > 0.95);
   // Throwing the club from the top unwinds more of the backswing early.
   assert.ok(cast.transitionRotation > normal.transitionRotation + 0.05);
+});
+
+test('short sensor clipping is repaired and the swing still launches', () => {
+  for (const seed of [1, 2]) {
+    // Peak 40 rad/s on a 2000 dps gyro and a 16 g accelerometer: both clip briefly.
+    const { samples, meta } = generateSwing({ type: 'saturated', seed });
+    const r = analyzeSwing(samples);
+    assert.equal(r.valid, true, r.reason);
+    assert.ok(r.warnings.includes('accel_clipped') && r.warnings.includes('gyro_clipped'));
+    assert.ok(Math.abs(r.phases.impact - meta.truth.impact) < 0.01);
+    // The clipped peak is reconstructed close to the truth (40 rad/s).
+    assert.ok(Math.abs(r.sensor.peakOmega - 40) < 4, `peak ${r.sensor.peakOmega}`);
+  }
+});
+
+test('accelerometer clipping alone never blocks a shot', () => {
+  const { samples } = generateSwing({ type: 'normal', seed: 3, accelRange: 40 });
+  const r = analyzeSwing(samples);
+  assert.equal(r.valid, true, r.reason);
+  assert.ok(r.warnings.includes('accel_clipped'));
+});
+
+test('long gyro clipping (swing far beyond the gyro range) is rejected', () => {
+  for (const seed of [1, 2]) {
+    const { samples } = generateSwing({ type: 'saturated', seed, gyroRange: 17.45 });
+    const r = analyzeSwing(samples);
+    assert.equal(r.valid, false);
+    assert.equal(r.reason, 'sensor_saturated');
+    assert.ok(r.sensor.gyroClipSeconds > 0.12);
+  }
+});
+
+test('diagnosis: launched swing, incomplete swing and live rejections explain themselves', async () => {
+  const { diagnoseSwing, diagnoseReject } = await import('../src/diagnose.js');
+  const ok = diagnoseSwing(analyzeSwing(generateSwing({ type: 'saturated', seed: 1 }).samples));
+  assert.equal(ok.ok, true);
+  assert.ok(ok.rows.some((r) => r.label === '가속도 센서' && r.value.includes('범위 초과')));
+  assert.ok(ok.tip.includes('보정'));
+  const bad = analyzeSwing(generateSwing({ type: 'saturated', seed: 1, gyroRange: 17.45 }).samples);
+  const d = diagnoseSwing(bad);
+  assert.equal(d.ok, false);
+  assert.ok(d.detail.includes('ms') && d.tip.length > 0);
+  const inc = diagnoseSwing({ valid: false, reason: 'incomplete_swing', livePhases: { addressStart: 1, top: 2, downswingStart: 2.1, impact: null, backswingDeg: 180, downswingDeg: 95, impactNeedDeg: 177 } });
+  assert.ok(inc.detail.includes('95°') && inc.detail.includes('177°'));
+  assert.ok(inc.rows.find((r) => r.label === '임팩트').status === 'bad');
+  const rej = diagnoseReject('smallBackswing', { backswingDeg: 22, minBackswingDeg: 30 });
+  assert.equal(rej.ok, false);
+  assert.ok(rej.rows[0].value.includes('22°'));
 });

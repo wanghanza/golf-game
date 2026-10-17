@@ -38,6 +38,7 @@ export const DEFAULT_ANALYSIS = Object.freeze({
   minPeakOmega: 3.0, // rad/s
   maxReversals: 4,
   impactLeadDeg: 0, // virtual impact when theta reaches address angle + lead
+  maxGyroClipSeconds: 0.12, // longer gyro clipping in the swing cannot be repaired reliably
   shockJerk: 50, // m/s^2 change between consecutive 200 Hz samples
   maxGapInSwing: 0.03, // s
   armRadius: 0.6, // m, assumed lead-shoulder-to-hands distance (model assumption)
@@ -84,7 +85,7 @@ export const REASON_TEXT = Object.freeze({
   shake: '흔들기 동작으로 판단되어 발사하지 않습니다',
   irregular_tempo: '스윙 템포가 비정상적입니다',
   shock: '충격이 감지되어 발사를 중단했습니다',
-  sensor_saturated: '센서 측정 범위를 넘었습니다. 더 천천히 스윙하세요',
+  sensor_saturated: '회전(자이로) 센서 측정 범위를 너무 오래 넘었습니다. 조금 더 천천히 스윙하세요',
   data_gap: '스윙 중 센서 데이터가 끊겼습니다',
 });
 
@@ -350,10 +351,34 @@ export function analyzeSwing(samples, options = {}) {
   const planeShiftDeg = horizontal(nBs) > 0.2 && horizontal(nDs) > 0.2 ? wrapDeg(az(nDs) - az(nBs)) : 0;
   const planeTiltDeg = Math.acos(Math.min(1, Math.abs(axis[2]))) * RAD2DEG;
 
-  // Shock: abrupt acceleration jump (dropped phone, hit an object).
+  // Sensor range use. The accelerometer is not used during the swing (only
+  // at address and for the transition feature), so clipping it is harmless;
+  // short gyro clipping is repaired in preprocess, long clipping is not.
+  const accelRuns = (pre.clipRuns ?? []).filter((r) => r.channel[0] === 'a');
+  const gyroRuns = (pre.clipRuns ?? []).filter((r) => r.channel[0] === 'g');
+  const accelClipLevel = accelRuns.length ? Math.min(...accelRuns.map((r) => r.level)) : null;
+  const gyroClipLevel = gyroRuns.length ? Math.min(...gyroRuns.map((r) => r.level)) : null;
+  const clipSecondsIn = (runs, a, b) => {
+    // Union of run intervals (channels overlap in time), clipped to [a, b].
+    const iv = runs.map((r) => [Math.max(a, r.t0), Math.min(b, r.t1 + dt)]).filter(([x, y]) => y > x).sort((p, q) => p[0] - q[0]);
+    let total = 0;
+    let cur = null;
+    for (const [x, y] of iv) {
+      if (!cur || x > cur[1]) {
+        if (cur) total += cur[1] - cur[0];
+        cur = [x, y];
+      } else cur[1] = Math.max(cur[1], y);
+    }
+    return cur ? total + cur[1] - cur[0] : total;
+  };
+
+  // Shock: abrupt acceleration jump (dropped phone, hit an object). Samples at
+  // the accelerometer's clip level are skipped: clipping itself makes jumps.
   let maxJerk = 0;
   let shockT = null;
+  const nearClip = (i) => accelClipLevel !== null && Math.max(Math.abs(R.ax[i]), Math.abs(R.ay[i]), Math.abs(R.az[i])) >= 0.97 * accelClipLevel;
   for (let i = Math.max(1, bsStart); i <= finishIdx; i++) {
+    if (nearClip(i) || nearClip(i - 1)) continue;
     const d = Math.abs(Math.hypot(R.ax[i], R.ay[i], R.az[i]) - Math.hypot(R.ax[i - 1], R.ay[i - 1], R.az[i - 1]));
     if (d > maxJerk) {
       maxJerk = d;
@@ -408,6 +433,7 @@ export function analyzeSwing(samples, options = {}) {
     qualityScore: feat(qualityScore, '0-1', 'estimated'),
   };
 
+  const gyroClipSeconds = clipSecondsIn(gyroRuns, tBs - 0.05, tImpact + 0.05);
   const result = {
     ...common,
     valid: true,
@@ -415,14 +441,27 @@ export function analyzeSwing(samples, options = {}) {
     phases,
     features,
     shock: { maxJerk, t: shockT },
+    sensor: {
+      peakOmega: peakOmegaMag,
+      peakAccel,
+      gyroRange: pre.gyroRange ?? null,
+      accelRange: pre.accelRange ?? null,
+      gyroClipLevel,
+      accelClipLevel,
+      gyroClipSeconds,
+      accelClipSeconds: clipSecondsIn(accelRuns, tBs - 0.05, tImpact + 0.05),
+    },
+    warnings: [],
   };
+  if (result.sensor.accelClipSeconds > 0) result.warnings.push('accel_clipped');
+  if (gyroClipSeconds > 0) result.warnings.push('gyro_clipped');
 
   // --- 8. validity rules -------------------------------------------------------
   const fail = (reason) => ({ ...result, valid: false, reason, reasonText: REASON_TEXT[reason] });
   const swingStart = tBs - 0.05;
   const swingEnd = F.t[finishIdx];
   if (pre.gaps.some((g) => g.end > swingStart && g.start < tImpact + 0.05 && g.duration > cfg.maxGapInSwing)) return fail('data_gap');
-  if (pre.saturation.some((s) => s.t >= swingStart && s.t <= tImpact + 0.05)) return fail('sensor_saturated');
+  if (gyroClipSeconds > cfg.maxGyroClipSeconds) return fail('sensor_saturated');
   if (maxJerk > cfg.shockJerk) return fail('shock');
   if (reversals > cfg.maxReversals) return fail('shake');
   if (peakOmegaInPlane < cfg.minPeakOmega) return fail('too_slow');

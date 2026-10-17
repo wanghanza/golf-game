@@ -70,11 +70,11 @@ export function findGaps(samples, medianDt, opts) {
 }
 
 /**
- * Flag clipped samples: runs of identical values at the channel extreme, or
- * values at/over the declared sensor range.
+ * Clipped stretches: runs of identical values at the channel extreme, or
+ * values at/over the declared sensor range. Returns runs with sample indices.
  */
-export function findSaturation(samples, opts) {
-  const events = [];
+export function findClipRuns(samples, opts) {
+  const runs = [];
   for (const c of CHANNELS) {
     const range = c[0] === 'a' ? opts.accelRange : opts.gyroRange;
     let maxAbs = 0;
@@ -82,20 +82,86 @@ export function findSaturation(samples, opts) {
     // Only large values can be clipping; a phone at rest repeats small values.
     const minClip = c[0] === 'a' ? opts.minAccelClip : opts.minGyroClip;
     if (maxAbs < minClip && !range) continue;
-    let run = 0;
+    let start = -1;
+    let byRange = false;
+    const close = (end) => {
+      const n = end - start + 1;
+      if (start >= 0 && (byRange || n >= opts.saturationRun)) {
+        runs.push({ channel: c, i0: start, i1: end, t0: samples[start].t, t1: samples[end].t, level: Math.abs(samples[start][c]) });
+      }
+      start = -1;
+      byRange = false;
+    };
     for (let i = 0; i < samples.length; i++) {
       const v = Math.abs(samples[i][c]);
       const atRange = range ? v >= range * 0.995 : false;
-      const atMax = v >= maxAbs * 0.9999 && i > 0 && samples[i][c] === samples[i - 1][c];
+      const atMax = v >= maxAbs * 0.9999 && (atRange || (i > 0 && samples[i][c] === samples[i - 1][c]) || (i + 1 < samples.length && samples[i + 1][c] === samples[i][c]));
       if (atRange || atMax) {
-        run++;
-        if (run === (atRange ? 1 : opts.saturationRun - 1)) events.push({ channel: c, t: samples[i].t });
-      } else {
-        run = 0;
+        if (start < 0) start = i;
+        byRange = byRange || atRange;
+      } else if (start >= 0) {
+        close(i - 1);
       }
     }
+    if (start >= 0) close(samples.length - 1);
   }
-  return events;
+  return runs;
+}
+
+/** Saturation events (first clipped sample of each run), kept for reporting. */
+export function findSaturation(samples, opts) {
+  return findClipRuns(samples, opts).map((r) => ({ channel: r.channel, t: r.t0, t1: r.t1 }));
+}
+
+/**
+ * Fill clipped gyro runs with a quadratic through the samples around them
+ * (the true peak lies above the clip level). Returns repaired copies.
+ */
+export function repairClipped(samples, runs) {
+  const out = samples.map((s) => ({ ...s }));
+  for (const r of runs) {
+    if (r.channel[0] !== 'g') continue;
+    const idx = [r.i0 - 2, r.i0 - 1, r.i1 + 1, r.i1 + 2].filter((i) => i >= 0 && i < samples.length);
+    if (idx.length < 3) continue;
+    // Least-squares quadratic v(t) = a + b u + c u^2, u = t - tmid.
+    const tm = (samples[r.i0].t + samples[r.i1].t) / 2;
+    const S = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+    const B = [0, 0, 0];
+    for (const i of idx) {
+      const u = samples[i].t - tm;
+      const row = [1, u, u * u];
+      for (let j = 0; j < 3; j++) {
+        B[j] += row[j] * samples[i][r.channel];
+        for (let k = 0; k < 3; k++) S[j][k] += row[j] * row[k];
+      }
+    }
+    const coef = solve3(S, B);
+    if (!coef) continue;
+    const sign = Math.sign(samples[r.i0][r.channel]) || 1;
+    for (let i = r.i0; i <= r.i1; i++) {
+      const u = samples[i].t - tm;
+      const fit = coef[0] + coef[1] * u + coef[2] * u * u;
+      // Never below the clip level, and at most 2x it.
+      out[i][r.channel] = sign * Math.min(2 * r.level, Math.max(r.level, Math.abs(fit)));
+    }
+  }
+  return out;
+}
+
+function solve3(A, b) {
+  const m = A.map((row, i) => [...row, b[i]]);
+  for (let c = 0; c < 3; c++) {
+    let p = c;
+    for (let r = c + 1; r < 3; r++) if (Math.abs(m[r][c]) > Math.abs(m[p][c])) p = r;
+    if (Math.abs(m[p][c]) < 1e-12) return null;
+    [m[c], m[p]] = [m[p], m[c]];
+    for (let r = 0; r < 3; r++) {
+      if (r === c) continue;
+      const f = m[r][c] / m[c][c];
+      for (let k = c; k < 4; k++) m[r][k] -= f * m[c][k];
+    }
+  }
+  return [m[0][3] / m[0][0], m[1][3] / m[1][1], m[2][3] / m[2][2]];
 }
 
 /** Linear resampling onto a uniform grid. */
@@ -127,8 +193,9 @@ export function preprocess(rawSamples, options = {}) {
   }
   const { rateHz, medianDt } = estimateRate(samples);
   const gaps = findGaps(samples, medianDt, opts);
-  const saturation = findSaturation(samples, opts);
-  const raw = resample(samples, opts.targetRate);
+  const clipRuns = findClipRuns(samples, opts);
+  const saturation = clipRuns.map((r) => ({ channel: r.channel, t: r.t0, t1: r.t1 }));
+  const raw = resample(repairClipped(samples, clipRuns), opts.targetRate);
   const coeffs = butterLowpass(opts.cutoffHz, opts.targetRate);
   const filtered = { t: raw.t, length: raw.length };
   for (const c of CHANNELS) filtered[c] = filtfilt(raw[c], coeffs);
@@ -140,6 +207,9 @@ export function preprocess(rawSamples, options = {}) {
     dropped,
     gaps,
     saturation,
+    clipRuns,
+    accelRange: opts.accelRange,
+    gyroRange: opts.gyroRange,
     raw,
     filtered,
   };
