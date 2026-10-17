@@ -15,9 +15,10 @@
 //               for the follow-through to settle
 //   cooldown    result delivered; short pause before re-arming
 //
-// Grip convention (phone held like a club grip): top of the phone toward the
-// ball, swing rotation about the phone's x axis; backswing = negative gx
-// (top moves toward the back of the phone). `direction: -1` flips this for
+// Grip convention (phone held like a club grip): the SCREEN is the club face
+// and looks at the target, the top of the phone points down toward the ball,
+// the swing turns about the phone's x axis; backswing = negative gx (the
+// phone moves toward its back, away from the target). `direction: -1` flips this for
 // players who hold the phone the other way round.
 //
 // The phases decide WHEN a swing happened; the offline analysis
@@ -37,6 +38,7 @@ export const DEFAULT_DETECTOR = Object.freeze({
   stillAccelDev: 1.2, // m/s^2
   minPitchDownDeg: 15,
   maxPitchDownDeg: 88,
+  maxFaceTiltDeg: 35, // screen (club face) must stand up, not lie flat
   // Backswing start: rotation toward the back, dominated by the x axis
   backswingOmega: 0.8, // rad/s
   backswingConfirmSeconds: 0.04,
@@ -78,6 +80,7 @@ export const PUTT_PHASES = Object.freeze({
 
 export const HINTS = Object.freeze({
   tilt: '휴대폰 끝을 비스듬히 아래(공 쪽)로 향하세요',
+  face: '화면(페이스)이 목표를 향하도록 세워 주세요',
   moving: '움직이지 말고 그대로 계세요',
   wrongDirection: '백스윙은 휴대폰 뒷면 쪽으로 올리세요',
   smallBackswing: '백스윙이 너무 작습니다 — 다시 어드레스하세요',
@@ -169,6 +172,12 @@ export class SwingDetector {
     return Math.asin(Math.max(-1, Math.min(1, -s.ay / a))) * DEG;
   }
 
+  /** How far the screen is tipped toward the sky (+) or ground (-), deg. */
+  static faceTiltDeg(s) {
+    const a = Math.hypot(s.ax, s.ay, s.az) || 1;
+    return Math.asin(Math.max(-1, Math.min(1, s.az / a))) * DEG;
+  }
+
   rejectAndReAddress(t, hint) {
     this.setHint(hint);
     this.resetPhase();
@@ -202,19 +211,22 @@ export class SwingDetector {
       }
       case 'waitStill': {
         const pitch = SwingDetector.pitchDownDeg(s);
-        const tilted = pitch >= c.minPitchDownDeg && pitch <= c.maxPitchDownDeg;
+        const pitchOk = pitch >= c.minPitchDownDeg && pitch <= c.maxPitchDownDeg;
+        const faceOk = Math.abs(SwingDetector.faceTiltDeg(s)) <= c.maxFaceTiltDeg;
+        const tilted = pitchOk && faceOk;
         const still = w < c.stillOmega && aDev < c.stillAccelDev;
+        const postureHint = pitchOk ? HINTS.face : HINTS.tilt;
         if (still && tilted) {
           if (this.stillSince === null) this.stillSince = s.t;
-          if (this.hint === HINTS.tilt || this.hint === HINTS.moving) this.setHint(null);
+          if (this.hint === HINTS.tilt || this.hint === HINTS.face || this.hint === HINTS.moving) this.setHint(null);
           if (s.t - this.stillSince >= c.stillSeconds) {
             this.addressStart = this.stillSince;
             this.setHint(null);
             this.setState('ready', s.t);
           }
         } else {
-          if (this.stillSince !== null && s.t - this.stillSince > 0.3) this.setHint(tilted ? HINTS.moving : HINTS.tilt);
-          else if (!tilted && still) this.setHint(HINTS.tilt);
+          if (this.stillSince !== null && s.t - this.stillSince > 0.3) this.setHint(tilted ? HINTS.moving : postureHint);
+          else if (!tilted && still) this.setHint(postureHint);
           this.stillSince = null;
         }
         break;
