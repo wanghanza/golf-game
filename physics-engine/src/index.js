@@ -6,3 +6,4 @@ export * from './clubs.js';
 export * from './shot-shape.js';
 export * from './game-config.js';
 export * from './shot-model.js';
+export * from './terrain-flight.js';

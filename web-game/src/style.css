@@ -146,3 +146,33 @@ label { color: var(--muted); font-size: 13px; }
   .page { grid-template-columns: 1fr; }
   .result { width: min(380px, 60%); }
 }
+
+/* ---------- course round ---------- */
+.hole-card { position: absolute; left: 12px; top: calc(max(8px, env(safe-area-inset-top)) + 52px); z-index: 4; background: var(--panel);
+  border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; font-size: 13px; max-width: 46%; }
+.hole-card .hc-title { font-size: 15px; margin-bottom: 3px; }
+.hole-card .hc-title span { color: #ffcf7a; margin-left: 4px; }
+.hc-row { color: var(--muted); margin-top: 2px; }
+.hc-row b { color: var(--text); font-size: 16px; }
+.hc-row.small { font-size: 12px; }
+.toast { position: absolute; left: 50%; bottom: calc(max(12px, env(safe-area-inset-bottom)) + 64px); transform: translateX(-50%); z-index: 6;
+  background: rgba(60, 30, 10, 0.85); border: 1px solid rgba(255, 190, 120, 0.4); border-radius: 12px; padding: 10px 16px; text-align: center;
+  font-size: 15px; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+.toast.show { opacity: 1; }
+.aim-pad { position: absolute; right: 12px; bottom: max(12px, env(safe-area-inset-bottom)); z-index: 4; display: flex; gap: 6px; }
+.aim-pad button { min-width: 52px; font-size: 18px; }
+.modal { position: absolute; inset: 0; z-index: 9; display: none; align-items: center; justify-content: center; background: rgba(0,0,0,0.45); }
+.modal.show { display: flex; }
+.modal-box { background: #2a1a10; border: 1px solid rgba(255, 190, 120, 0.4); border-radius: 16px; padding: 16px 18px; max-width: 94%; max-height: 92%; overflow: auto; text-align: center; }
+.big-score { font-size: 34px; font-weight: 800; color: #ffcf7a; }
+.card-table { border-collapse: collapse; margin: 10px auto 0; font-size: 13px; font-variant-numeric: tabular-nums; }
+.card-table td, .card-table th { border: 1px solid rgba(255,255,255,0.15); padding: 4px 7px; text-align: center; }
+.card-table th { color: var(--muted); font-weight: 600; }
+.card-table td.under { color: #7ed957; font-weight: 700; }
+.card-table td.over { color: #ff9b7a; }
+.loading { position: absolute; inset: 0; z-index: 10; display: none; align-items: center; justify-content: center; text-align: center;
+  background: radial-gradient(900px 500px at 50% 40%, #6b3418, #1e0f08); }
+.loading.show { display: flex; }
+.loading b { display: block; font-size: 30px; margin-bottom: 8px; color: #ffcf7a; }
+.loading span { color: #f3d9bd; }
+.loading .cue-bar { margin: 16px auto 0; width: min(60vw, 420px); }

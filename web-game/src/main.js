@@ -4,6 +4,7 @@ import { createHomeScreen, createSettingsScreen, createSafetyScreen, createTvScr
 import { createGameScreen } from './screens/game.js';
 import { createRecorderScreen } from './screens/recorder.js';
 import { createSimulateScreen } from './screens/simulate.js';
+import { createRoundScreen } from './screens/round.js';
 
 const root = document.getElementById('app');
 
@@ -27,6 +28,7 @@ const app = {
 const factories = {
   home: createHomeScreen,
   game: createGameScreen,
+  round: createRoundScreen,
   recorder: createRecorderScreen,
   simulate: createSimulateScreen,
   settings: createSettingsScreen,
