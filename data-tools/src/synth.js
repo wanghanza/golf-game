@@ -77,13 +77,84 @@ function gammaFn(z) {
 
 const rotZ = (v, a) => [v[0] * Math.cos(a) - v[1] * Math.sin(a), v[0] * Math.sin(a) + v[1] * Math.cos(a), v[2]];
 
+// Downswing angular-velocity profiles (tau = time since the top).
+//
+// timedDownswing: a slow transition (the club angle is held while the hands
+// drop, omega ~ transitionOmega * peak) followed by a sigmoid acceleration
+// whose steepest point sits at accelPhase of the downswing (0 = top,
+// 1 = impact). Around 0.65 the club peaks just before impact; early phases
+// release (cast) and slow down before impact; late phases are still
+// accelerating at impact.
+function timedDownswing(o, thTop, wpk) {
+  const p = o.accelPhase ?? 0.65;
+  // Transition speed (fraction of peak); keeps the motion continuous for slow swings.
+  const b = o.transitionOmega ?? Math.max(0.15, 1.6 / wpk);
+  const ramp = 0.15;
+  const tauD = 0.12;
+  // Acceleration width scales with the swing: at accelPhase 0.65 the
+  // sigmoid saturates (omega peaks) right at impact.
+  const widthOf = (tc) => (tc * (1 / 0.65 - 1)) / 3;
+  const shape = (tau, tc) => {
+    if (tau <= 0) return 0;
+    const wr = widthOf(tc);
+    const ti = tc / p;
+    const sig = 1 / (1 + Math.exp(-(tau - tc) / wr));
+    const r = Math.min(1, tau / ramp);
+    const h = b * r * r * (3 - 2 * r) + (1 - b) * sig;
+    // An early release peaks and then slows toward a plateau before impact;
+    // after impact the follow-through dies out.
+    const tpk = tc + 3 * wr;
+    const slow = tau > tpk ? 0.7 + 0.3 * Math.exp(-(tau - tpk) / tauD) : 1;
+    // A late acceleration is still building speed at impact.
+    const tEnd = Math.max(ti, tpk);
+    const fin = tau > tEnd ? Math.exp(-(tau - tEnd) / 0.2) : 1;
+    return h * slow * fin;
+  };
+  // Normalise so that the peak equals wpk.
+  const peakOf = (tc) => {
+    let m = 0;
+    for (let i = 1; i <= 300; i++) m = Math.max(m, shape((i / 300) * (Math.max(tc / p, tc + 3 * widthOf(tc)) + 0.2), tc));
+    return m;
+  };
+  const integ = (tc, T) => {
+    const m = 400;
+    let a = 0;
+    for (let i = 0; i < m; i++) a += shape(((i + 0.5) / m) * T, tc) * (T / m);
+    return (wpk * a) / peakOf(tc);
+  };
+  let lo = 0.005;
+  let hi = 4;
+  for (let it = 0; it < 60; it++) {
+    const mid = 0.5 * (lo + hi);
+    if (integ(mid, mid / p) > thTop) hi = mid;
+    else lo = mid;
+  }
+  const tc = 0.5 * (lo + hi);
+  const norm = wpk / peakOf(tc);
+  return { omega: (tau) => norm * shape(tau, tc), impact: tc / p, length: Math.max(tc / p, tc + 3 * widthOf(tc)) + 1.2 };
+}
+
+// Gamma-shaped burst (legacy release model): k = 3 peaks just before impact,
+// a small k (casting) peaks early. Integral = wpk * tauP * e^k * Gamma(k+1) / k^(k+1).
+function gammaDownswing(k, thTop, thFin, wpk) {
+  const gammaArea = (Math.exp(k) * gammaFn(k + 1)) / Math.pow(k, k + 1);
+  const tauP = (thTop + thFin) / (wpk * gammaArea);
+  return {
+    omega: (tau) => (tau <= 0 ? 0 : wpk * Math.pow(tau / tauP, k) * Math.exp(k * (1 - tau / tauP))),
+    impact: 1.1 * tauP,
+    length: (k < 2 ? 8 : 5) * tauP,
+  };
+}
+
 export const SWING_TYPES = Object.freeze({
   normal: { label: '정상 스윙', peakOmega: 11, faceRollDeg: 0, planeShiftDeg: 0 },
   draw: { label: '드로 의도 스윙', peakOmega: 11, faceRollDeg: 9, planeShiftDeg: 4 },
   fade: { label: '페이드 의도 스윙', peakOmega: 11, faceRollDeg: -9, planeShiftDeg: -4 },
   slow: { label: '느린 스윙', peakOmega: 5.5, faceRollDeg: 0, planeShiftDeg: 0 },
   fast: { label: '빠른 스윙', peakOmega: 17, faceRollDeg: 0, planeShiftDeg: 0 },
-  cast: { label: '얼리 릴리스 (캐스팅)', peakOmega: 11, releaseK: 1.3 },
+  cast: { label: '얼리 릴리스 (탑에서 던짐)', peakOmega: 11, releaseK: 1.3, dropDepth: 0 },
+  late: { label: '늦은 가속 (임팩트 직전에야 가속)', peakOmega: 11, accelPhase: 0.9 },
+  early: { label: '이른 가속 (다운스윙 초반에 힘을 씀)', peakOmega: 11, accelPhase: 0.4 },
   roll: { label: '빠른 손목 로테이션', peakOmega: 11, rollClosure: 0.9 },
   hold: { label: '로테이션 억제 (홀딩)', peakOmega: 11, rollClosure: -0.15 },
   half: { label: '하프 스윙', peakOmega: 8, faceRollDeg: 0, planeShiftDeg: 0, topDeg: 110, finishDeg: 120 },
@@ -144,19 +215,13 @@ export function generateSwing(p = {}) {
   const tAddr = (o.addressSeconds ?? 3.4) + 0.3 * rand();
   const thTop = o.topDeg * DEG;
   const thFin = o.finishDeg * DEG;
-  // Release shape: k = 3 is a well-timed release (angular velocity peaks just
-  // before impact); a small k (early release / casting) peaks early and has
-  // already slowed at impact.
-  const k = o.releaseK ?? 3;
   const wpk = o.peakOmega ?? 11;
-  // Gamma-shaped burst: integral = wpk * tauP * e^k * Gamma(k+1) / k^(k+1).
-  const gammaArea = (Math.exp(k) * gammaFn(k + 1)) / Math.pow(k, k + 1);
-  const tauP = (thTop + thFin) / (wpk * gammaArea);
-  const tdEst = 1.1 * tauP;
+  const ds = o.releaseK ? gammaDownswing(o.releaseK, thTop, thFin, wpk) : timedDownswing(o, thTop, wpk);
+  const tdEst = ds.impact;
   const tb = o.backswingSeconds ?? Math.min(2.0, Math.max(0.35, o.tempo * tdEst));
   const tPause = 0.04;
   const tDs0 = tAddr + tb + tPause;
-  const burstLen = (k < 2 ? 8 : 5) * tauP;
+  const burstLen = ds.length;
   const total = tDs0 + burstLen + 0.8;
 
   const wpAt = (t) => {
@@ -174,8 +239,17 @@ export function generateSwing(p = {}) {
       const T = 0.6;
       return tau < T ? ((a * Math.PI) / (2 * T)) * Math.sin((Math.PI * tau) / T) : 0;
     }
-    const x = tau / tauP;
-    return wpk * Math.pow(x, k) * Math.exp(k * (1 - x));
+    return ds.omega(tau);
+  };
+
+  // Transition drop: the hands fall a little at the start of the downswing
+  // (arms and gravity) and come back up to address height by impact.
+  const dropDepth = o.dropDepth ?? 0.12;
+  const dropT = tdEst;
+  const dropAt = (t) => {
+    const u = (t - tDs0) / dropT;
+    if (o.shake || u <= 0 || u >= 1) return 0;
+    return -dropDepth * 0.5 * (1 - Math.cos(2 * Math.PI * u));
   };
 
   // Integrate orientation (world-frame angular velocity), plane rotation and twist.
@@ -208,7 +282,7 @@ export function generateSwing(p = {}) {
     const yWorld = quat.rotate(q, [0, 1, 0]);
     const wPlane = v3.scale(n, wp);
     const wWorld = v3.add(wPlane, v3.scale(yWorld, phiRate));
-    const pos = v3.add(center, quat.rotate(qPlane, v3.scale(d0, r)));
+    const pos = v3.add(v3.add(center, [0, 0, dropAt(t)]), quat.rotate(qPlane, v3.scale(d0, r)));
     fine.push({ t, q, wWorld, pos });
 
     if (wp > peakW && pastTop) {

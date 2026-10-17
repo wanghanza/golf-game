@@ -13,15 +13,19 @@ export function swingFromFeatures(f) {
     planeShiftDeg: (settings.invertPath ? -1 : 1) * (f.planeShiftDeg ?? 0),
     qualityScore: f.qualityScore,
     lagRetention: f.lagRetention,
+    accelPeakPhase: f.accelPeakPhase,
+    transitionRotation: f.transitionRotation,
+    transitionDropAccel: f.transitionDropAccel,
   };
 }
 
-/** Short Korean description of the wrist action for the result card. */
+/** Short Korean descriptions of transition, acceleration zone and face. */
 export function wristText(wrist, faceAngle = 0) {
   if (!wrist) return '';
-  const rel = wrist.release >= 0.8 ? '래그 유지' : wrist.release >= 0.4 ? '약간 이른 릴리스' : '이른 릴리스(캐스팅)';
-  const face = faceAngle < -1 ? '페이스 닫힘(손목 굽힘·로테이션 많음)' : faceAngle > 1 ? '페이스 열림(손목 펴짐·로테이션 부족)' : '페이스 스퀘어';
-  return `${rel} · ${face}`;
+  const tr = wrist.steep >= 0.5 ? '탑에서 던짐(가파름)' : wrist.steep >= 0.2 ? '전환 약간 급함' : '자연스러운 낙하';
+  const acc = wrist.early >= 0.3 ? '가속 이름(캐스팅)' : wrist.late >= 0.3 ? '가속 늦음' : '가속 타이밍 좋음';
+  const face = faceAngle < -1 ? '페이스 닫힘' : faceAngle > 1 ? '페이스 열림' : '페이스 스퀘어';
+  return `${tr} · ${acc} · ${face}`;
 }
 
 export function shotFromAnalysis(result, club = settings.club) {

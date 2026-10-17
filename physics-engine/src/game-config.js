@@ -47,6 +47,23 @@ export const DEFAULT_GAME_CONFIG = Object.freeze({
   lagPoor: 0.8,
   minLagSpeed: 0.75,
   castLoftDeg: 5,
+  // Acceleration zone (fraction of the downswing where rotational power
+  // peaks). The club is the last link of the kinematic sequence, so it
+  // should gain most of its speed late in the downswing. The window is a
+  // game estimate, not a measured norm.
+  accelZone: [0.6, 0.88],
+  accelEarlySpan: 0.3, // full "early" penalty at accelZone[0] - span
+  accelLateSpan: 0.1,
+  earlyFaceCloseDeg: 1.5,
+  lateFaceOpenDeg: 4,
+  lateDeloftDeg: 3,
+  // Transition from the top ("vertical drop"): share of the backswing angle
+  // already unwound in the first 35% of the downswing [good, bad], and the
+  // mean downward hand acceleration there [bad, good] in m/s^2.
+  transitionRotation: [0.1, 0.3],
+  transitionDrop: [-1, 1.5],
+  steepPathDeg: 3,
+  steepAttackDeg: 2,
 });
 
 export function resolveGameConfig(overrides = {}) {
