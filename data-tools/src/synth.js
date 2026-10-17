@@ -62,6 +62,19 @@ function quatFromBasis(x, y, z) {
   return quat.normalize(q);
 }
 
+// Lanczos approximation of the gamma function (for the release profile area).
+function gammaFn(z) {
+  const g = 7;
+  const c = [0.99999999999980993, 676.5203681218851, -1259.1392167224028, 771.32342877765313, -176.61502916214059,
+    12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7];
+  if (z < 0.5) return Math.PI / (Math.sin(Math.PI * z) * gammaFn(1 - z));
+  z -= 1;
+  let x = c[0];
+  for (let i = 1; i < g + 2; i++) x += c[i] / (z + i);
+  const t = z + g + 0.5;
+  return Math.sqrt(2 * Math.PI) * Math.pow(t, z + 0.5) * Math.exp(-t) * x;
+}
+
 const rotZ = (v, a) => [v[0] * Math.cos(a) - v[1] * Math.sin(a), v[0] * Math.sin(a) + v[1] * Math.cos(a), v[2]];
 
 export const SWING_TYPES = Object.freeze({
@@ -70,6 +83,9 @@ export const SWING_TYPES = Object.freeze({
   fade: { label: '페이드 의도 스윙', peakOmega: 11, faceRollDeg: -9, planeShiftDeg: -4 },
   slow: { label: '느린 스윙', peakOmega: 5.5, faceRollDeg: 0, planeShiftDeg: 0 },
   fast: { label: '빠른 스윙', peakOmega: 17, faceRollDeg: 0, planeShiftDeg: 0 },
+  cast: { label: '얼리 릴리스 (캐스팅)', peakOmega: 11, releaseK: 1.3 },
+  roll: { label: '빠른 손목 로테이션', peakOmega: 11, rollClosure: 0.9 },
+  hold: { label: '로테이션 억제 (홀딩)', peakOmega: 11, rollClosure: -0.15 },
   half: { label: '하프 스윙', peakOmega: 8, faceRollDeg: 0, planeShiftDeg: 0, topDeg: 110, finishDeg: 120 },
   incomplete: { label: '불완전한 스윙 (다운스윙 중단)', peakOmega: 6, incomplete: true },
   shake: { label: '스윙이 아닌 손동작 (흔들기)', shake: true },
@@ -128,16 +144,19 @@ export function generateSwing(p = {}) {
   const tAddr = (o.addressSeconds ?? 3.4) + 0.3 * rand();
   const thTop = o.topDeg * DEG;
   const thFin = o.finishDeg * DEG;
-  const k = 3;
+  // Release shape: k = 3 is a well-timed release (angular velocity peaks just
+  // before impact); a small k (early release / casting) peaks early and has
+  // already slowed at impact.
+  const k = o.releaseK ?? 3;
   const wpk = o.peakOmega ?? 11;
-  // Gamma-shaped burst: integral = wpk * tauP * e^k * k! / k^(k+1).
-  const gammaArea = Math.exp(k) * 6 / Math.pow(k, k + 1);
+  // Gamma-shaped burst: integral = wpk * tauP * e^k * Gamma(k+1) / k^(k+1).
+  const gammaArea = (Math.exp(k) * gammaFn(k + 1)) / Math.pow(k, k + 1);
   const tauP = (thTop + thFin) / (wpk * gammaArea);
   const tdEst = 1.1 * tauP;
   const tb = o.backswingSeconds ?? Math.min(2.0, Math.max(0.35, o.tempo * tdEst));
   const tPause = 0.04;
   const tDs0 = tAddr + tb + tPause;
-  const burstLen = 5 * tauP;
+  const burstLen = (k < 2 ? 8 : 5) * tauP;
   const total = tDs0 + burstLen + 0.8;
 
   const wpAt = (t) => {
@@ -182,7 +201,7 @@ export function generateSwing(p = {}) {
     let phi;
     if (!pastTop) phi = thTop > 0 ? phiTop * Math.min(1, -theta / thTop) : 0;
     else if (theta <= 0) phi = faceT + (phiTop - faceT) * (-theta / thTop);
-    else phi = faceT - 0.3 * theta;
+    else phi = faceT - (o.rollClosure ?? 0.3) * theta; // forearm rotation closing the face after impact
     if (o.shake) phi = 0;
     const phiRate = i === 0 ? 0 : (phi - prevPhi) / dt;
     prevPhi = phi;

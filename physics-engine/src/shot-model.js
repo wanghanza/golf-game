@@ -28,13 +28,15 @@ export function deliveryToLaunch(delivery, clubKey, opts = {}) {
   const attack = delivery.attackAngle ?? club.refAttack;
   const strike = clamp(delivery.strikeQuality ?? 1, 0, 1);
   const penalty = (opts.maxStrikePenalty ?? 0.12) * (1 - strike);
-  const ballSpeed = club.smash * (1 - penalty) * Math.max(0, delivery.clubSpeed);
+  // Extra dynamic loft (e.g. from an early release) lowers smash factor a little.
+  const loftExtra = delivery.dynamicLoftExtra ?? 0;
+  const ballSpeed = club.smash * (1 - penalty) * (1 - 0.006 * Math.max(0, loftExtra)) * Math.max(0, delivery.clubSpeed);
   // Launch rises with attack angle; about half of an attack-angle change
-  // shows up in launch angle.
-  const launchAngle = club.refLaunch + 0.5 * (attack - club.refAttack);
+  // shows up in launch angle. Added dynamic loft raises launch ~0.75 per deg.
+  const launchAngle = club.refLaunch + 0.5 * (attack - club.refAttack) + 0.75 * loftExtra;
   // Spin scales with club speed relative to the reference delivery.
   const speedRatio = club.refClubSpeed > 0 ? delivery.clubSpeed / club.refClubSpeed : 0;
-  const spinRate = Math.max(0, club.refSpin * speedRatio * (1 - 0.5 * penalty));
+  const spinRate = Math.max(0, club.refSpin * speedRatio * (1 - 0.5 * penalty) * (delivery.spinFactor ?? 1));
   // D-plane: start direction mostly follows the face; curvature follows the
   // face-to-path difference relative to spin loft.
   const face = delivery.faceAngle ?? 0;
@@ -52,6 +54,8 @@ export function deliveryToLaunch(delivery, clubKey, opts = {}) {
  * @param {number} [swing.faceRollDeg]     deg, estimated phone roll at virtual impact
  * @param {number} [swing.planeShiftDeg]   deg, estimated swing-plane azimuth shift
  * @param {number} [swing.qualityScore]    0..1, estimated
+ * @param {number} [swing.lagRetention]    omega at impact / peak omega (derived)
+ * @param {number} [swing.rollRatio]       forearm roll rate / in-plane omega at impact (derived)
  */
 export function swingToDelivery(swing, clubKey, configOverrides = {}) {
   const cfg = resolveGameConfig(configOverrides);
@@ -59,9 +63,21 @@ export function swingToDelivery(swing, clubKey, configOverrides = {}) {
   const level = PLAYER_LEVELS[cfg.playerLevel] ?? PLAYER_LEVELS.average;
   const powerRaw = Math.max(0, swing.peakOmega) / cfg.referenceOmega;
   const power = clamp(Math.pow(powerRaw, cfg.powerExponent), 0, cfg.maxPowerRatio);
-  const clubSpeed = club.refClubSpeed * level.speedScale * power;
+  // Wrist action.
+  let release = 1; // 1 = lag held, 0 = full early release
+  let rollFace = 0;
+  if (cfg.wristModel) {
+    if (Number.isFinite(swing.lagRetention)) {
+      release = clamp((swing.lagRetention - cfg.lagPoor) / (cfg.lagIdeal - cfg.lagPoor), 0, 1);
+    }
+    if (Number.isFinite(swing.rollRatio)) {
+      rollFace = clamp(-(swing.rollRatio - cfg.rollNeutral) * cfg.rollFaceGainDeg, -cfg.rollFaceClampDeg, cfg.rollFaceClampDeg);
+    }
+  }
+  const cast = 1 - release;
+  const clubSpeed = club.refClubSpeed * level.speedScale * power * (1 - cfg.castSpeedLoss * cast);
   const assist = 1 - clamp(cfg.directionAssist, 0, 1);
-  const faceAngle = clamp((swing.faceRollDeg ?? 0) * cfg.faceGain, -cfg.faceClampDeg, cfg.faceClampDeg) * assist;
+  const faceAngle = (clamp((swing.faceRollDeg ?? 0) * cfg.faceGain, -cfg.faceClampDeg, cfg.faceClampDeg) + rollFace) * assist;
   const clubPath = clamp((swing.planeShiftDeg ?? 0) * cfg.pathGain, -cfg.pathClampDeg, cfg.pathClampDeg) * assist;
   return {
     power,
@@ -71,6 +87,9 @@ export function swingToDelivery(swing, clubKey, configOverrides = {}) {
     // Game attack angle: the driver is struck slightly on the way up.
     attackAngle: club.gameAttack ?? club.refAttack,
     strikeQuality: clamp(swing.qualityScore ?? 1, 0, 1),
+    dynamicLoftExtra: cfg.castLoftDeg * cast,
+    spinFactor: 1 + cfg.castSpinGain * cast,
+    wrist: { release, rollFaceDeg: rollFace * assist },
   };
 }
 

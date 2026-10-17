@@ -10,6 +10,7 @@ import { createCourse, headingTo } from '../../../course-engine/src/terrain.js';
 import { Round, scoreName, PUTT_MAX_DISTANCE } from '../../../course-engine/src/round.js';
 import { settings, fmtDist } from '../settings.js';
 import { cues, unlockAudio } from '../cues.js';
+import { swingFromFeatures } from '../shot.js';
 import { createSwingInput, STATE_TEXT } from '../ui/swing-input.js';
 import { CourseScene } from '../course/scene.js';
 
@@ -166,16 +167,7 @@ export function createRoundScreen(app) {
       execute(() => round.playPutt(strength, aim), `퍼팅 ${fmtDist(strength * PUTT_MAX_DISTANCE)} 세기`);
       return;
     }
-    const shot = swingToShot(
-      {
-        peakOmega: f.peakOmegaInPlane,
-        faceRollDeg: (settings.invertFace ? -1 : 1) * (f.faceRollDeg ?? 0),
-        planeShiftDeg: (settings.invertPath ? -1 : 1) * (f.planeShiftDeg ?? 0),
-        qualityScore: f.qualityScore,
-      },
-      club,
-      settings.game,
-    );
+    const shot = swingToShot(swingFromFeatures(f), club, settings.game);
     if (!info.impactPlayed) cues.impact({ club, power: shot.delivery.power, quality: shot.delivery.strikeQuality });
     execute(() => round.playShot(shot.launch, aim), `${CLUB_LABEL(club)} · ${shot.shape.label} · 파워 ${(shot.delivery.power * 100).toFixed(0)}%`);
   }

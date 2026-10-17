@@ -276,6 +276,27 @@ export function analyzeSwing(samples, options = {}) {
   const qRel = quat.mul(quat.conj(q0), qImpact);
   const faceRollDeg = quat.twistAngle(qRel, cfg.longAxis) * RAD2DEG;
 
+  // Wrist action through impact.
+  //  - lag retention: angular velocity at impact / peak (an early release or
+  //    "cast" has already slowed down by impact)
+  //  - release timing: peak time relative to impact (negative = before)
+  //  - forearm rotation rate about the phone's long axis at impact
+  //    (+ = face closing, - = held open)
+  const lagRetention = peakOmegaInPlane > 0 ? omegaAtImpact / peakOmegaInPlane : 0;
+  const releaseTimingMs = (F.t[dsPeakIdx] - tImpact) * 1000;
+  const L = cfg.longAxis;
+  const avgRoll = (i0r, i1r) => {
+    let sum = 0;
+    let m = 0;
+    for (let i = Math.max(0, i0r); i <= Math.min(n - 1, i1r); i++) {
+      sum += (F.gx[i] - bias[0]) * L[0] + (F.gy[i] - bias[1]) * L[1] + (F.gz[i] - bias[2]) * L[2];
+      m++;
+    }
+    return m ? sum / m : 0;
+  };
+  const rollWin = Math.round(0.02 * fs);
+  const forearmRollRate = -avgRoll(impactIdx - rollWin, impactIdx + rollWin);
+
   // Swing-plane shift between backswing and downswing (horizontal azimuth of
   // the plane normal). Experimental proxy for club path.
   const planeOf = (a, b) => {
@@ -339,6 +360,9 @@ export function analyzeSwing(samples, options = {}) {
     impactTime: feat(tImpact, 's', 'estimated', '가상 임팩트: 어드레스 각도로 복귀한 시점'),
     handSpeed: feat(Math.max(0, omegaAtImpact) * cfg.armRadius, 'm/s', 'estimated', `팔 길이 ${cfg.armRadius} m 가정`),
     faceRollDeg: feat(faceRollDeg, 'deg', 'estimated', '임팩트 시 휴대폰 장축 회전 (페이스 추정용, 미검증)'),
+    lagRetention: feat(lagRetention, 'ratio', 'derived', '임팩트 각속도 / 최대 각속도 (래그 유지율)'),
+    releaseTimingMs: feat(releaseTimingMs, 'ms', 'derived', '최대 각속도 시점 - 임팩트 (음수 = 임팩트 전)'),
+    forearmRollRate: feat(forearmRollRate, 'rad/s', 'derived', '임팩트 시 전완 회전 속도 (+ 페이스 닫힘)'),
     planeShiftDeg: feat(planeShiftDeg, 'deg', 'estimated', '백스윙 대비 다운스윙 평면 방위 변화 (경로 추정용, 미검증)'),
     qualityScore: feat(qualityScore, '0-1', 'estimated'),
   };
