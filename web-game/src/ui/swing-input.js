@@ -9,10 +9,10 @@ import { cues, unlockAudio } from '../cues.js';
 import { settings } from '../settings.js';
 
 export const STATE_TEXT = {
-  idle: ['스윙 준비를 누르세요', '휴대폰 끝이 공 쪽(비스듬히 아래)을 향하게 그립처럼 쥐고, 손목 스트랩을 착용하세요'],
+  idle: ['스윙 준비를 누르세요', '화면 = 클럽 페이스: 화면은 목표 쪽, 휴대폰 끝은 공 쪽(비스듬히 아래)으로 그립처럼 쥐고 손목 스트랩을 착용하세요'],
   countdown: ['휴대폰을 그립처럼 쥐세요', '곧 어드레스 확인을 시작합니다'],
-  waitStill: ['어드레스 — 3초간 그대로', '휴대폰 끝을 비스듬히 아래로 향하고 움직이지 마세요'],
-  ready: ['준비 완료 — 백스윙을 시작하세요', '휴대폰 뒷면 쪽으로 들어 올리세요'],
+  waitStill: ['어드레스 — 3초간 그대로', '화면은 목표 쪽, 휴대폰 끝은 비스듬히 아래로 향하고 움직이지 마세요'],
+  ready: ['준비 완료 — 백스윙을 시작하세요', '휴대폰 뒷면 쪽(목표 반대쪽)으로 들어 올리세요'],
   backswing: ['백스윙', ''],
   top: ['탑', '잠깐 멈췄다가 내려오세요'],
   downswing: ['다운스윙', ''],
@@ -104,7 +104,7 @@ export function createSwingInput(root, o) {
     if (st === 'countdown') {
       const left = Math.ceil(detector.countdownLeft ?? 0);
       cueBig.textContent = String(Math.max(1, left));
-      cueSub.textContent = isPutt() ? '퍼터처럼 쥐고 공 앞에 서세요' : '휴대폰 끝을 비스듬히 아래로 향해 그립처럼 쥐세요';
+      cueSub.textContent = isPutt() ? '화면을 목표 쪽으로 퍼터처럼 쥐세요' : '화면(페이스)은 목표 쪽, 휴대폰 끝은 공 쪽 아래로 쥐세요';
       cueBar.style.width = '0%';
       if (left !== lastTick && left > 0) {
         lastTick = left;
@@ -114,11 +114,11 @@ export function createSwingInput(root, o) {
       const p = detector.stillProgress;
       const total = detector.cfg.stillSeconds;
       cueBig.textContent = p > 0 ? `${Math.max(0, total * (1 - p)).toFixed(1)}초` : '어드레스';
-      cueSub.textContent = hint || '휴대폰 끝을 비스듬히 아래로 향하고 그대로 멈추세요';
+      cueSub.textContent = hint || '화면은 목표 쪽, 끝은 비스듬히 아래 — 그대로 멈추세요';
       cueBar.style.width = `${Math.round(p * 100)}%`;
     } else if (st === 'ready') {
       cueBig.textContent = isPutt() ? '퍼팅!' : '백스윙!';
-      cueSub.textContent = hint || (isPutt() ? '시계추처럼 뒤로 뺐다가 밀어 주세요' : '휴대폰 뒷면 쪽으로 들어 올리세요 · 작고 부드럽게');
+      cueSub.textContent = hint || (isPutt() ? '시계추처럼 뒤로 뺐다가 목표 쪽으로 밀어 주세요' : '뒷면 쪽(목표 반대쪽)으로 들어 올리세요 · 작고 부드럽게');
       cueBar.style.width = '100%';
       if (performance.now() - readySince > 6000) {
         readySince = performance.now();

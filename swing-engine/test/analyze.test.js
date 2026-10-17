@@ -193,7 +193,8 @@ test('phase detector never launches for a shake or an aborted downswing', () => 
 });
 
 test('address needs 3 s of stillness with the phone tilted down', () => {
-  const still = (t, ay) => ({ t, ax: 0, ay, az: Math.sqrt(Math.max(0, 9.80665 ** 2 - ay * ay)), gx: 0.01, gy: 0, gz: 0 });
+  // Screen standing up (gravity in the x-y plane), top pitched by ay.
+  const still = (t, ay) => ({ t, ax: Math.sqrt(Math.max(0, 9.80665 ** 2 - ay * ay)), ay, az: 0, gx: 0.01, gy: 0, gz: 0 });
   // Flat phone (top level with the horizon): never ready.
   let det = new SwingDetector({ config: { autoRearm: false } });
   const hints = [];
@@ -209,6 +210,18 @@ test('address needs 3 s of stillness with the phone tilted down', () => {
   assert.equal(det.state, 'waitStill');
   for (let i = 590; i < 640; i++) det.push(still(i / 200, -8));
   assert.equal(det.state, 'ready');
+});
+
+test('address needs the screen (club face) standing up toward the target', () => {
+  // Top tilted down 50 deg but the screen lies facing the sky: no address.
+  const g = 9.80665;
+  const lying = (t) => ({ t, ax: 0, ay: -g * Math.sin(0.87), az: g * Math.cos(0.87), gx: 0, gy: 0, gz: 0 });
+  const hints = [];
+  const det = new SwingDetector({ onHint: (h) => h && hints.push(h), config: { autoRearm: false } });
+  det.arm();
+  for (let i = 0; i < 1000; i++) det.push(lying(i / 200));
+  assert.equal(det.state, 'waitStill');
+  assert.ok(hints.some((h) => h.includes('페이스')));
 });
 
 test('a takeaway toward the screen side is rejected (backswing goes toward the back)', () => {

@@ -41,7 +41,7 @@ export function createSettingsScreen(app) {
         <select data-k="units"><option value="m">미터 (m)</option><option value="yd">야드 (yd)</option></select>
         <label>어드레스 정지 시간 (초)</label>
         <select data-k="addressSeconds"><option value="2">2초</option><option value="3">3초 (기본)</option><option value="4">4초</option><option value="5">5초</option></select>
-        <label><input type="checkbox" data-k="swingDirectionFlip" /> 스윙 방향 반전 (백스윙이 휴대폰 화면 쪽으로 올라가게 쥐는 경우)</label>
+        <label><input type="checkbox" data-k="swingDirectionFlip" /> 스윙 방향 반전 (화면을 목표 반대쪽으로 쥐는 경우)</label>
         <label>센서 요청 속도</label>
         <select data-k="sensorRateHz"><option value="100">100 Hz</option><option value="200">200 Hz</option></select>
       </div>
@@ -119,12 +119,12 @@ export function createSafetyScreen(app) {
       <h2>스윙 전에 꼭 확인하세요</h2>
       <ul>
         <li><b>손목 스트랩</b>이 달린 케이스나 스트랩을 사용하고, 휴대폰을 양손으로 단단히 잡으세요.</li>
-        <li>휴대폰은 <b>세로로 세워 긴 쪽이 골프채 샤프트 방향</b>이 되도록 그립처럼 쥡니다 (페이스 회전 추정이 이 방향을 기준으로 합니다).</li>
+        <li><b>그립 방법</b>: 휴대폰 <b>화면이 클럽 페이스</b>입니다. 화면은 목표 쪽(오른손잡이는 몸 왼쪽)을 향하게 세우고, 휴대폰 끝(위쪽)은 공 쪽으로 비스듬히 아래를 향하게 그립처럼 쥡니다. 임팩트 때 화면이 목표를 향하면 스트레이트, 오른쪽으로 열리면 페이드·슬라이스, 왼쪽으로 닫히면 드로·훅 방향으로 계산합니다.</li>
         <li>주변 <b>2m 이상</b>에 사람, 반려동물, TV, 가구, 조명이 없는지 확인하세요.</li>
         <li><b>작고 느린 하프 스윙</b>으로 충분합니다. 이 게임은 전력 스윙을 요구하지 않으며, 세게 휘둘러도 거리가 늘지 않습니다 (파워 상한 적용).</li>
         <li>손목·팔꿈치·허리에 통증이 있으면 즉시 중단하세요.</li>
         <li>미끄러운 바닥, 좁은 실내, 천장이 낮은 곳에서는 사용하지 마세요.</li>
-        <li>스윙 순서: <b>어드레스</b>(휴대폰 끝을 비스듬히 아래로, 3초 정지) → <b>백스윙</b>(휴대폰 뒷면 쪽으로 들어 올림) → <b>탑</b>(잠깐 멈춤) → <b>다운스윙</b>(내려옴) → 임팩트. 화면 위쪽에 현재 인식된 단계가 표시됩니다.</li>
+        <li>스윙 순서: <b>어드레스</b>(휴대폰 끝을 비스듬히 아래로, 3초 정지) → <b>백스윙</b>(휴대폰 뒷면 쪽, 즉 목표 반대쪽으로 들어 올림) → <b>탑</b>(잠깐 멈춤) → <b>다운스윙</b>(내려옴) → 임팩트. 화면 위쪽에 현재 인식된 단계가 표시됩니다.</li>
         <li>스윙 중에는 화면 터치가 잠깁니다. 잠금 해제는 오른쪽 위 버튼을 1초간 누르세요.</li>
         <li>센서 이상, 데이터 끊김, 충격(떨어뜨림 등)이 감지되면 공을 발사하지 않습니다.</li>
       </ul>
