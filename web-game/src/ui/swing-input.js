@@ -8,6 +8,8 @@ import { keepScreenOn } from '../platform.js';
 import { cues, unlockAudio } from '../cues.js';
 import { settings } from '../settings.js';
 import { clubPosture, CLUBS } from '../../../physics-engine/src/clubs.js';
+import { diagnoseSwing, diagnoseReject } from '../../../swing-engine/src/diagnose.js';
+import { createDiagPanel } from './diag-panel.js';
 
 export const STATE_TEXT = {
   idle: ['스윙 준비를 누르세요', '화면 = 클럽 페이스: 화면은 목표 쪽, 휴대폰 끝은 공 쪽(비스듬히 아래)으로 그립처럼 쥐고 손목 스트랩을 착용하세요'],
@@ -60,6 +62,8 @@ export function createSwingInput(root, o) {
   const listeners = new Set();
 
   const isPutt = () => o.getClub() === 'putter';
+  const diag = createDiagPanel(root);
+  const ranges = () => sensors.analysisOptions().preprocess ?? {};
 
   const detector = new SwingDetector({
     onState: (st) => {
@@ -79,11 +83,13 @@ export function createSwingInput(root, o) {
       update();
     },
     onSwing: (r) => {
+      diag.show(diagnoseSwing(r, { ...ranges(), minBackswingDeg: detector.cfg.minBackswingDeg }));
       const info = { impactPlayed };
       impactPlayed = false;
       if (!r.valid) cues.rejected();
       o.onResult(r, info);
     },
+    onReject: (e) => diag.show(diagnoseReject(e.code, e)),
     onImpact: (e) => {
       const club = o.getClub();
       const ref = club === 'putter' ? 3 : settings.game.referenceOmega || 11;
@@ -96,6 +102,7 @@ export function createSwingInput(root, o) {
 
   function update() {
     const st = detector.state;
+    diag.render();
     cue.className = `cue ${st}`;
     const idx = PHASE_INDEX[st] ?? -1;
     phaseEls.forEach((e, i) => {
@@ -171,6 +178,7 @@ export function createSwingInput(root, o) {
       const r = await sensors.start(settings.sensorRateHz);
       if (!r.ok) return r;
       keepScreenOn(true);
+      diag.setRanges(ranges());
       api.configure();
       detector.arm({ delaySeconds: 3 });
       return { ok: true };
@@ -201,7 +209,10 @@ export function createSwingInput(root, o) {
       o.setStatus(...STATE_TEXT.idle);
     },
     enter() {
-      unsub = sensors.onSample((s) => detector.push(s));
+      unsub = sensors.onSample((s) => {
+        detector.push(s);
+        diag.track(s);
+      });
       timer = setInterval(update, 100);
     },
     leave() {

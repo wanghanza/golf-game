@@ -100,13 +100,14 @@ export const HINTS = Object.freeze({
 });
 
 export class SwingDetector {
-  constructor({ config = {}, analysis = {}, onState = () => {}, onSwing = () => {}, onImpact = () => {}, onHint = () => {} } = {}) {
+  constructor({ config = {}, analysis = {}, onState = () => {}, onSwing = () => {}, onImpact = () => {}, onHint = () => {}, onReject = () => {} } = {}) {
     this.cfg = { ...DEFAULT_DETECTOR, ...config };
     this.analysis = analysis;
     this.onState = onState;
     this.onSwing = onSwing;
     this.onImpact = onImpact;
     this.onHint = onHint;
+    this.onReject = onReject;
     this.buf = [];
     this.state = 'idle';
     this.stateSince = 0;
@@ -196,7 +197,9 @@ export class SwingDetector {
     return Math.asin(Math.max(-1, Math.min(1, s.az / a))) * DEG;
   }
 
-  rejectAndReAddress(t, hint) {
+  /** @param {string} [code] reason key (HINTS) reported through onReject */
+  rejectAndReAddress(t, hint, code, info) {
+    if (code) this.onReject({ code, t, ...info });
     this.setHint(hint);
     this.resetPhase();
     this.setState('waitStill', t);
@@ -273,10 +276,10 @@ export class SwingDetector {
           this.candidateSince = null;
           if (-b > c.backswingOmega && dominant) {
             // Moving toward the screen first: not a takeaway.
-            this.rejectAndReAddress(s.t, HINTS.wrongDirection);
+            this.rejectAndReAddress(s.t, HINTS.wrongDirection, 'wrongDirection');
           } else if (w > c.stillOmega * 3 && !(b > 0 && dominant)) {
             // Fidgeting: require a fresh address.
-            this.rejectAndReAddress(s.t, HINTS.moving);
+            this.rejectAndReAddress(s.t, HINTS.moving, 'moving');
           } else if (s.t - this.stateSince > c.readyTimeoutSeconds) {
             this.rejectAndReAddress(s.t, null);
           }
@@ -290,7 +293,7 @@ export class SwingDetector {
           if (this.bsAngle * DEG >= c.minBackswingDeg && !tooLong) {
             this.setState('top', s.t);
           } else {
-            this.rejectAndReAddress(s.t, HINTS.smallBackswing);
+            this.rejectAndReAddress(s.t, HINTS.smallBackswing, 'smallBackswing', { backswingDeg: this.bsAngle * DEG, minBackswingDeg: c.minBackswingDeg });
           }
         }
         break;
@@ -304,7 +307,7 @@ export class SwingDetector {
         } else if (b > c.backswingOmega) {
           this.setState('backswing', s.t); // kept turning back
         } else if (s.t - this.stateSince > c.maxTopSeconds) {
-          this.rejectAndReAddress(s.t, HINTS.longTop);
+          this.rejectAndReAddress(s.t, HINTS.longTop, 'longTop', { backswingDeg: this.bsAngle * DEG, topSeconds: s.t - this.stateSince, maxTopSeconds: c.maxTopSeconds });
         }
         break;
       }
@@ -365,6 +368,8 @@ export class SwingDetector {
       downswingStart: this.phaseTimes.downswing ?? null,
       impact: this.impactT,
       backswingDeg: this.bsAngle * DEG,
+      downswingDeg: this.dsAngle * DEG,
+      impactNeedDeg: this.bsAngle * DEG + this.cfg.impactPastAddressDeg - this.cfg.impactEarlyDeg,
     };
     this.setState('cooldown', t);
     this.onSwing(result, window);
