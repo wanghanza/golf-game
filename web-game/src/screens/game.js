@@ -141,6 +141,7 @@ export function createGameScreen(app) {
   clubSel.addEventListener('change', () => {
     settings.club = clubSel.value;
     saveSettings();
+    if (input.active) input.configure(); // club-specific address lean / impact
   });
   return {
     el,

@@ -90,6 +90,7 @@ export const SWING_TYPES = Object.freeze({
  *   the geometric face twist (truth.faceTwistDeg) also includes the effect of
  *   a plane change
  * @param {number} [p.planeShiftDeg] downswing plane azimuth change (deg)
+ * @param {number} [p.addressLeanDeg] shaft lean toward the target at address (deg)
  */
 export function generateSwing(p = {}) {
   const type = p.type ?? 'normal';
@@ -117,7 +118,10 @@ export function generateSwing(p = {}) {
   const yBody = d0;
   const xBody = nBs;
   const zBody = v3.cross(xBody, yBody);
-  const q0 = quatFromBasis(xBody, yBody, zBody);
+  // Shaft lean at address: the phone is turned back (toward the backswing)
+  // by the lean, so the hands are ahead of the club head.
+  const lean = ((o.addressLeanDeg ?? 0) * Math.PI) / 180;
+  const q0 = quat.mul(quatFromBasis(xBody, yBody, zBody), quat.fromAxisAngle([1, 0, 0], -lean));
 
   // In-plane angular velocity profile.
   // Address: the player holds still for >= 3 s before taking the club back.

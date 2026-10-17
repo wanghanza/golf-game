@@ -7,6 +7,7 @@ import { SwingDetector, DEFAULT_DETECTOR, PUTT_PHASES } from '../../../swing-eng
 import { keepScreenOn } from '../platform.js';
 import { cues, unlockAudio } from '../cues.js';
 import { settings } from '../settings.js';
+import { clubPosture, CLUBS } from '../../../physics-engine/src/clubs.js';
 
 export const STATE_TEXT = {
   idle: ['스윙 준비를 누르세요', '화면 = 클럽 페이스: 화면은 목표 쪽, 휴대폰 끝은 공 쪽(비스듬히 아래)으로 그립처럼 쥐고 손목 스트랩을 착용하세요'],
@@ -114,7 +115,12 @@ export function createSwingInput(root, o) {
       const p = detector.stillProgress;
       const total = detector.cfg.stillSeconds;
       cueBig.textContent = p > 0 ? `${Math.max(0, total * (1 - p)).toFixed(1)}초` : '어드레스';
-      cueSub.textContent = hint || '화면은 목표 쪽, 끝은 비스듬히 아래 — 그대로 멈추세요';
+      const club = o.getClub();
+      const want = detector.cfg.addressLeanDeg;
+      const name = club === 'putter' ? '퍼터' : CLUBS[club]?.label ?? '';
+      const lean = detector.leanDeg;
+      const leanText = Number.isFinite(lean) ? `샤프트 기울기 ${Math.round(lean)}° · 권장 ${want}° (${name})` : '';
+      cueSub.textContent = `${hint || '화면은 목표 쪽, 끝은 비스듬히 아래 — 그대로 멈추세요'}${leanText ? ` · ${leanText}` : ''}`;
       cueBar.style.width = `${Math.round(p * 100)}%`;
     } else if (st === 'ready') {
       cueBig.textContent = isPutt() ? '퍼팅!' : '백스윙!';
@@ -172,13 +178,19 @@ export function createSwingInput(root, o) {
     /** Apply putting or full-swing thresholds for the current club. */
     configure() {
       const base = sensors.analysisOptions();
-      const common = { direction: settings.swingDirection === -1 ? -1 : 1, stillSeconds: settings.addressSeconds || 3 };
+      const posture = clubPosture(o.getClub());
+      const common = {
+        direction: settings.swingDirection === -1 ? -1 : 1,
+        stillSeconds: settings.addressSeconds || 3,
+        addressLeanDeg: posture.addressLeanDeg,
+        impactPastAddressDeg: posture.impactPastAddressDeg,
+      };
       if (isPutt()) {
         detector.cfg = { ...DEFAULT_DETECTOR, ...PUTT_PHASES, ...common };
-        detector.analysis = { ...base, ...PUTT_ANALYSIS };
+        detector.analysis = { ...base, ...PUTT_ANALYSIS, impactLeadDeg: posture.impactPastAddressDeg };
       } else {
         detector.cfg = { ...DEFAULT_DETECTOR, ...common };
-        detector.analysis = base;
+        detector.analysis = { ...base, impactLeadDeg: posture.impactPastAddressDeg };
       }
     },
     stop() {
