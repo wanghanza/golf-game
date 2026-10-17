@@ -79,7 +79,7 @@ export function createGameScreen(app) {
     const side = flight.totalLateral;
     result.innerHTML = `
       <div class="shape">${esc(shot.shape.label)}</div>
-      ${D.wrist ? `<div class="muted">손목: ${esc(wristText(D.wrist))} (게임 모델 추정)</div>` : ''}
+      ${D.wrist ? `<div class="muted">손목: ${esc(wristText(D.wrist, D.faceAngle))} (게임 모델 추정)</div>` : ''}
       <div class="big">
         <div>캐리<b>${fmtDist(flight.carry)}</b></div>
         <div>총거리<b>${fmtDist(flight.total)}</b></div>
@@ -96,7 +96,7 @@ export function createGameScreen(app) {
         <span class="k">휴대폰 최대 각속도</span><span class="v">${fmt(f.peakOmegaInPlane)} rad/s</span>${tag('derived')}
         <span class="k">래그 유지율</span><span class="v">${fmt((f.lagRetention ?? 0) * 100, 0)}%</span>${tag('derived')}
         <span class="k">릴리스 시점</span><span class="v">임팩트 ${fmt(Math.abs(f.releaseTimingMs ?? 0), 0)} ms ${(f.releaseTimingMs ?? 0) <= 0 ? '전' : '후'}</span>${tag('derived')}
-        <span class="k">전완 회전 속도</span><span class="v">${fmt(f.forearmRollRate)} rad/s</span>${tag('derived')}
+        <span class="k">전완 회전 속도 (참고)</span><span class="v">${fmt(f.forearmRollRate)} rad/s</span>${tag('derived')}
         <span class="k">템포 (백:다운)</span><span class="v">${fmt(f.tempoRatio)} : 1</span>${tag('derived')}
         <span class="k">백스윙 회전각</span><span class="v">${fmt(f.backswingAngle, 0)}°</span>${tag('derived')}
         <span class="k">스윙 완성도</span><span class="v">${fmt(f.qualityScore * 100, 0)}점</span>${tag('estimated')}
@@ -125,7 +125,7 @@ export function createGameScreen(app) {
   let sampleSeed = 1;
   function sampleSwing() {
     unlockAudio();
-    const types = ['normal', 'draw', 'fade', 'cast', 'roll', 'hold', 'half', 'fast'];
+    const types = ['normal', 'draw', 'fade', 'cast', 'half', 'fast'];
     const type = types[(sampleSeed - 1) % types.length];
     const { samples, meta } = generateSwing({ type, seed: sampleSeed++ });
     handleResult(analyzeSwing(samples), `합성 데이터 · ${meta.swingTypeLabel}`);
