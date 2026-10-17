@@ -244,3 +244,44 @@ test('a takeaway toward the screen side is rejected (backswing goes toward the b
   for (let i = 1; i <= 400; i++) det2.push({ ...last, t: last.t + i / 200, gx: 0, gy: 0, gz: 0 });
   assert.equal(ok.length, 1);
 });
+
+test('address checks the club-specific shaft lean (hands ahead for irons)', () => {
+  const run = (leanDeg, cfg) => {
+    const { samples } = generateSwing({ type: 'normal', seed: 4, addressLeanDeg: leanDeg });
+    const hints = [];
+    const ok = [];
+    const det = new SwingDetector({ onHint: (h) => h && hints.push(h), onSwing: (r) => ok.push(r.valid), config: { autoRearm: false, ...cfg } });
+    det.arm();
+    for (const s of samples) det.push(s);
+    const last = samples.at(-1);
+    for (let i = 1; i <= 400; i++) det.push({ ...last, t: last.t + i / 200, gx: 0, gy: 0, gz: 0 });
+    return { hints, ok };
+  };
+  // 7-iron posture (4 deg) with a 7-iron set-up: accepted.
+  assert.deepEqual(run(4, { addressLeanDeg: 4 }).ok, [true]);
+  // Wedge-like 14 deg lean while the driver (0 deg) is selected: no address, hint to stand the shaft up.
+  const r = run(14, { addressLeanDeg: 0 });
+  assert.deepEqual(r.ok, []);
+  assert.ok(r.hints.some((h) => h.includes('세우세요')));
+  // No lean while the wedge (7 deg) wants hands ahead... within tolerance (8 deg) it is still accepted.
+  assert.deepEqual(run(0, { addressLeanDeg: 7 }).ok, [true]);
+});
+
+test('driver impact is just past the address angle (ascending), irons at the address angle', () => {
+  const { samples, meta } = generateSwing({ type: 'normal', seed: 6 });
+  const impactAt = (cfg) => {
+    const hits = [];
+    const det = new SwingDetector({ onImpact: (e) => hits.push(e.t), config: { autoRearm: false, ...cfg } });
+    det.arm();
+    for (const s of samples) det.push(s);
+    return hits[0];
+  };
+  const iron = impactAt({ impactPastAddressDeg: 0 });
+  const driver = impactAt({ impactPastAddressDeg: 4 });
+  assert.ok(driver > iron, 'driver later');
+  assert.ok(driver - iron < 0.03, 'only a few degrees later');
+  // Offline analysis follows the same rule.
+  const a0 = analyzeSwing(samples, { impactLeadDeg: 0 }).phases.impact;
+  const a4 = analyzeSwing(samples, { impactLeadDeg: 4 }).phases.impact;
+  assert.ok(a4 > a0 && Math.abs(a0 - meta.truth.impact) < 0.015);
+});

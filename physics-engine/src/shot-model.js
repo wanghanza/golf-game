@@ -68,7 +68,8 @@ export function swingToDelivery(swing, clubKey, configOverrides = {}) {
     clubSpeed,
     faceAngle,
     clubPath,
-    attackAngle: club.refAttack,
+    // Game attack angle: the driver is struck slightly on the way up.
+    attackAngle: club.gameAttack ?? club.refAttack,
     strikeQuality: clamp(swing.qualityScore ?? 1, 0, 1),
   };
 }

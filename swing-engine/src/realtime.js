@@ -39,6 +39,10 @@ export const DEFAULT_DETECTOR = Object.freeze({
   minPitchDownDeg: 15,
   maxPitchDownDeg: 88,
   maxFaceTiltDeg: 35, // screen (club face) must stand up, not lie flat
+  // Shaft lean at address (deg toward the target, hands ahead of the ball):
+  // driver ~0, 7-iron ~4, wedge ~7. Measured in the swing plane from gravity.
+  addressLeanDeg: 0,
+  leanToleranceDeg: 8,
   // Backswing start: rotation toward the back, dominated by the x axis
   backswingOmega: 0.8, // rad/s
   backswingConfirmSeconds: 0.04,
@@ -50,7 +54,11 @@ export const DEFAULT_DETECTOR = Object.freeze({
   maxTopSeconds: 2.0,
   // Downswing: reversed rotation
   downswingOmega: 1.0,
-  impactReturnFraction: 0.95, // impact when the phone is back at 95% of the backswing angle
+  // Impact: the phone is back at the address angle (irons/woods), or a few
+  // degrees past it for an ascending driver strike. Fired ~3 deg early to
+  // offset audio output latency.
+  impactPastAddressDeg: 0,
+  impactEarlyDeg: 3,
   minPeakOmega: 2.5, // rad/s, slower "downswings" are not shots
   maxDownswingSeconds: 1.5,
   // Follow-through
@@ -81,6 +89,8 @@ export const PUTT_PHASES = Object.freeze({
 export const HINTS = Object.freeze({
   tilt: '휴대폰 끝을 비스듬히 아래(공 쪽)로 향하세요',
   face: '화면(페이스)이 목표를 향하도록 세워 주세요',
+  leanMore: '손을 목표 쪽으로 조금 더 (핸드 퍼스트)',
+  leanLess: '샤프트를 조금 더 세우세요 (손이 너무 앞)',
   moving: '움직이지 말고 그대로 계세요',
   wrongDirection: '백스윙은 휴대폰 뒷면 쪽으로 올리세요',
   smallBackswing: '백스윙이 너무 작습니다 — 다시 어드레스하세요',
@@ -172,6 +182,14 @@ export class SwingDetector {
     return Math.asin(Math.max(-1, Math.min(1, -s.ay / a))) * DEG;
   }
 
+  /**
+   * Shaft lean in the swing plane, deg: + = top of the phone (club head)
+   * behind the hands, i.e. hands toward the target.
+   */
+  static leanDeg(s) {
+    return Math.atan2(-s.az, -s.ay) * DEG;
+  }
+
   /** How far the screen is tipped toward the sky (+) or ground (-), deg. */
   static faceTiltDeg(s) {
     const a = Math.hypot(s.ax, s.ay, s.az) || 1;
@@ -213,12 +231,16 @@ export class SwingDetector {
         const pitch = SwingDetector.pitchDownDeg(s);
         const pitchOk = pitch >= c.minPitchDownDeg && pitch <= c.maxPitchDownDeg;
         const faceOk = Math.abs(SwingDetector.faceTiltDeg(s)) <= c.maxFaceTiltDeg;
-        const tilted = pitchOk && faceOk;
+        const lean = SwingDetector.leanDeg(s);
+        this.leanDeg = this.leanDeg === undefined ? lean : this.leanDeg * 0.9 + lean * 0.1;
+        const leanErr = this.leanDeg - c.addressLeanDeg;
+        const leanOk = Math.abs(leanErr) <= c.leanToleranceDeg;
+        const tilted = pitchOk && faceOk && leanOk;
         const still = w < c.stillOmega && aDev < c.stillAccelDev;
-        const postureHint = pitchOk ? HINTS.face : HINTS.tilt;
+        const postureHint = !pitchOk ? HINTS.tilt : !faceOk ? HINTS.face : leanErr < 0 ? HINTS.leanMore : HINTS.leanLess;
         if (still && tilted) {
           if (this.stillSince === null) this.stillSince = s.t;
-          if (this.hint === HINTS.tilt || this.hint === HINTS.face || this.hint === HINTS.moving) this.setHint(null);
+          if ([HINTS.tilt, HINTS.face, HINTS.moving, HINTS.leanMore, HINTS.leanLess].includes(this.hint)) this.setHint(null);
           if (s.t - this.stillSince >= c.stillSeconds) {
             this.addressStart = this.stillSince;
             this.setHint(null);
@@ -289,7 +311,8 @@ export class SwingDetector {
       case 'downswing': {
         if (-b > 0) this.dsAngle += -b * dt;
         this.peak = Math.max(this.peak, w);
-        if (this.dsAngle >= this.bsAngle * c.impactReturnFraction) {
+        const impactAngle = this.bsAngle + ((c.impactPastAddressDeg - c.impactEarlyDeg) / DEG);
+        if (this.dsAngle >= impactAngle) {
           if (this.peak >= c.minPeakOmega) {
             this.impactT = s.t;
             this.onImpact({ t: s.t, peakOmega: this.peak, backswingDeg: this.bsAngle * DEG });
