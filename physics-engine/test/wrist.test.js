@@ -61,3 +61,16 @@ test('face direction comes from the face roll angle, wrist inputs absent or mode
   const b = swingToShot({ ...base, lagRetention: 0.8, accelPeakPhase: 0.2, transitionRotation: 0.4 }, 'iron7', { wristModel: false });
   assert.deepEqual(a.launch, b.launch);
 });
+
+test('compareToIdeal ranks what cost the shot and explains it', async () => {
+  const { compareToIdeal } = await import('../src/shot-compare.js');
+  const clean = compareToIdeal({ peakOmega: 11, faceRollDeg: 0, planeShiftDeg: 0, qualityScore: 1, lagRetention: 0.96, accelPeakPhase: 0.75, transitionRotation: 0.08, transitionDropAccel: 2 }, 'iron7');
+  assert.ok(Math.abs(clean.actual.carry - clean.ideal.carry) < 0.5);
+  assert.equal(clean.factors.filter((f) => f.hurts).length, 0);
+  const sliced = compareToIdeal({ peakOmega: 21, faceRollDeg: 14, planeShiftDeg: 0, qualityScore: 1, lagRetention: 0.85 }, 'wood3');
+  assert.equal(sliced.factors[0].key, 'face');
+  assert.ok(sliced.factors[0].dLateral > 10 && sliced.factors[0].advice.includes('열려'));
+  assert.ok(sliced.factors.find((f) => f.key === 'lag').hurts);
+  assert.equal(sliced.overPower, true);
+  assert.ok(sliced.factors.find((f) => f.key === 'power').advice.includes('105%'));
+});

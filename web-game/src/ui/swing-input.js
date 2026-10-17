@@ -163,8 +163,22 @@ export function createSwingInput(root, o) {
   });
   ['pointerup', 'pointerleave', 'pointercancel'].forEach((ev) => unlockBtn.addEventListener(ev, () => clearTimeout(pressTimer)));
 
+  // Peak in-plane angular velocity of recent valid full swings (for calibration).
+  const recentPeaks = [];
   const api = {
     detector,
+    diag,
+    recordPeak(omega) {
+      if (!Number.isFinite(omega)) return;
+      recentPeaks.push(omega);
+      if (recentPeaks.length > 5) recentPeaks.shift();
+    },
+    /** Median of recent full-swing peaks (rad/s), or null with fewer than 2. */
+    typicalPeak() {
+      if (recentPeaks.length < 2) return null;
+      const s = [...recentPeaks].sort((a, b) => a - b);
+      return s[Math.floor(s.length / 2)];
+    },
     get active() {
       return detector.state !== 'idle';
     },
