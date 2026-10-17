@@ -11,6 +11,8 @@ export const DEFAULT_SETTINGS = Object.freeze({
   safetyAccepted: false,
   invertFace: false,
   invertPath: false,
+  swingDirection: 1,
+  addressSeconds: 3,
   game: { ...DEFAULT_GAME_CONFIG },
 });
 

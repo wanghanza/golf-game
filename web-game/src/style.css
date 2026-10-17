@@ -95,11 +95,18 @@ label { color: var(--muted); font-size: 13px; }
 .cue.countdown { background: rgba(40, 60, 120, 0.55); }
 .cue.waitStill { background: rgba(200, 120, 20, 0.45); }
 .cue.ready { background: rgba(40, 170, 70, 0.5); }
-.cue.swinging, .cue.cooldown, .cue.idle { background: transparent; }
+.cue.backswing, .cue.top { background: rgba(30, 110, 170, 0.35); }
+.cue.downswing, .cue.follow { background: rgba(170, 60, 30, 0.3); }
+.phase-row { display: flex; gap: 6px; align-items: center; margin-bottom: 14px; font-size: min(3.6vh, 20px); font-weight: 700; }
+.phase-row span { padding: 4px 10px; border-radius: 999px; background: rgba(0,0,0,0.35); color: rgba(255,255,255,0.55); }
+.phase-row span.done { background: rgba(126, 217, 87, 0.35); color: #fff; }
+.phase-row span.now { background: #fff; color: #102010; }
+.phase-row b { color: rgba(255,255,255,0.6); }
+.cue.cooldown, .cue.idle { background: transparent; }
 .cue-big { font-size: min(22vh, 160px); font-weight: 800; line-height: 1; text-shadow: 0 4px 18px rgba(0,0,0,0.5); }
 .cue-sub { margin-top: 10px; font-size: min(4.5vh, 26px); font-weight: 600; text-shadow: 0 2px 8px rgba(0,0,0,0.6); max-width: 80%; }
 .cue-bar { margin-top: 18px; width: min(60vw, 520px); height: 14px; border-radius: 999px; background: rgba(255,255,255,0.25); overflow: hidden; }
-.cue.swinging .cue-bar, .cue.cooldown .cue-bar, .cue.idle .cue-bar { display: none; }
+.cue.backswing .cue-bar, .cue.top .cue-bar, .cue.downswing .cue-bar, .cue.follow .cue-bar, .cue.cooldown .cue-bar, .cue.idle .cue-bar { display: none; }
 .cue-bar i { display: block; height: 100%; width: 0; background: #fff; border-radius: 999px; transition: width 0.1s linear; }
 .touch-lock .unlock { position: absolute; right: 12px; top: max(10px, env(safe-area-inset-top)); background: var(--panel); }
 .sim-banner { position: absolute; left: 12px; top: 64px; z-index: 4; font-size: 12px; color: var(--warn); background: var(--panel); border-radius: 8px; padding: 6px 10px; display: none; }

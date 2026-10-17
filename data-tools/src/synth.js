@@ -110,13 +110,18 @@ export function generateSwing(p = {}) {
   let nBs = v3.normalize(v3.cross(d0, toTarget));
   if (v3.dot(v3.cross(nBs, d0), toTarget) < 0) nBs = v3.scale(nBs, -1);
   const nDs = rotZ(nBs, (o.planeShiftDeg ?? 0) * DEG);
+  // Grip: the phone's top (+y) points obliquely down toward the ball and the
+  // swing turns about the phone's width axis (+x = plane normal), so the
+  // backswing (negative in-plane rotation) moves the top toward the phone's
+  // back (-z) and the downswing toward its screen side.
   const yBody = d0;
-  const xBody = v3.normalize(v3.cross(yBody, nBs));
+  const xBody = nBs;
   const zBody = v3.cross(xBody, yBody);
   const q0 = quatFromBasis(xBody, yBody, zBody);
 
   // In-plane angular velocity profile.
-  const tAddr = 0.8 + 0.2 * rand();
+  // Address: the player holds still for >= 3 s before taking the club back.
+  const tAddr = (o.addressSeconds ?? 3.4) + 0.3 * rand();
   const thTop = o.topDeg * DEG;
   const thFin = o.finishDeg * DEG;
   const k = 3;
