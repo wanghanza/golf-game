@@ -51,7 +51,7 @@ export function spinAxisVector(launchDirectionDeg, spinAxisDeg) {
   return normalize(add(scale(right, -Math.cos(a)), [0, Math.sin(a), 0]));
 }
 
-function makeAccel(env, axis, omega0) {
+export function makeAccel(env, axis, omega0) {
   const { rho, wind, aero } = env;
   const k = (0.5 * rho * BALL_AREA) / BALL.mass;
   return function accel(t, v) {
@@ -71,7 +71,7 @@ function makeAccel(env, axis, omega0) {
   };
 }
 
-function rk4Step(p, v, t, dt, accel) {
+export function rk4Step(p, v, t, dt, accel) {
   const a1 = accel(t, v);
   const v2 = add(v, scale(a1, dt / 2));
   const a2 = accel(t + dt / 2, v2);

@@ -11,7 +11,8 @@ export function createHomeScreen(app) {
     <h1>⛳ Golf Swing Reader</h1>
     <p class="sub">휴대폰을 골프채처럼 쥐고 가볍게 스윙하면 센서 값으로 공이 날아갑니다 · ${isAndroidApp() ? '안드로이드 앱' : '웹 버전'}</p>
     <div class="menu">
-      <button class="primary" data-go="game"><b>스윙 게임</b><span>휴대폰을 휘둘러 3D 연습장에서 샷</span></button>
+      <button class="primary" data-go="round"><b>코스 라운드 · 18홀</b><span>단풍 바다 CC — 가을 산악 코스, 바다 전망</span></button>
+      <button data-go="game"><b>연습장</b><span>휴대폰을 휘둘러 3D 연습장에서 샷</span></button>
       <button data-go="simulate"><b>시뮬레이션 테스트</b><span>저장·합성 데이터로 스윙 재현 후 발사</span></button>
       <button data-go="recorder"><b>센서 분석 · 수집</b><span>6축 센서 그래프, 기록, CSV/JSON 내보내기</span></button>
       <button data-go="settings"><b>설정</b><span>클럽, 감도, 단위, 게임 보정값</span></button>

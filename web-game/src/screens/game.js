@@ -2,24 +2,14 @@
 import { h, $, fmt, tag, esc } from '../util.js';
 import { RangeScene } from '../game/scene.js';
 import { sensors } from '../sensors.js';
-import { SwingDetector } from '../../../swing-engine/src/realtime.js';
 import { REASON_TEXT } from '../../../swing-engine/src/analyze.js';
 import { generateSwing } from '../../../data-tools/src/synth.js';
 import { analyzeSwing } from '../../../swing-engine/src/analyze.js';
 import { CLUBS, CLUB_ORDER } from '../../../physics-engine/src/clubs.js';
 import { settings, saveSettings, fmtDist } from '../settings.js';
 import { shotFromAnalysis } from '../shot.js';
-import { keepScreenOn } from '../platform.js';
 import { cues, unlockAudio } from '../cues.js';
-
-const STATE_TEXT = {
-  idle: ['스윙 준비를 누르세요', '휴대폰을 세로로 세워 긴 쪽이 샤프트 방향이 되게 양손으로 쥐고, 손목 스트랩을 착용하세요'],
-  countdown: ['휴대폰을 그립처럼 쥐세요', '잠시 뒤 어드레스 확인을 시작합니다'],
-  waitStill: ['어드레스 자세로 멈추세요', '움직이지 않으면 준비됩니다'],
-  ready: ['준비 완료 — 스윙하세요', '"삐-삐" 소리와 진동이 신호입니다'],
-  swinging: ['스윙 감지 중…', ''],
-  cooldown: ['분석 완료', ''],
-};
+import { createSwingInput, STATE_TEXT } from '../ui/swing-input.js';
 
 export function createGameScreen(app) {
   const el = h(`
@@ -39,100 +29,43 @@ export function createGameScreen(app) {
       <button data-act="reset">공 다시 놓기</button>
     </div>
     <div class="result" data-el="result"></div>
-    <div class="touch-lock" data-el="lock">
-      <div class="cue" data-el="cue"><div class="cue-big" data-el="cue-big"></div><div class="cue-sub" data-el="cue-sub"></div><div class="cue-bar"><i data-el="cue-bar"></i></div></div>
-      <button class="unlock" data-act="unlock">길게 눌러 잠금 해제</button>
-    </div>
   </section>`);
 
   const status = $(el, '[data-el=status]');
   const result = $(el, '[data-el=result]');
-  const lock = $(el, '[data-el=lock]');
   const sensorPill = $(el, '[data-el=sensor]');
   const banner = $(el, '[data-el=banner]');
   const clubSel = $(el, '[data-act=club]');
   const armBtn = $(el, '[data-act=arm]');
   let scene = null;
-  let unsub = null;
   let pillTimer = null;
 
   const setStatus = (main, sub = '') => {
     status.innerHTML = `${esc(main)}${sub ? `<small>${esc(sub)}</small>` : ''}`;
   };
 
-  const cue = $(el, '[data-el=cue]');
-  const cueBig = $(el, '[data-el=cue-big]');
-  const cueSub = $(el, '[data-el=cue-sub]');
-  const cueBar = $(el, '[data-el=cue-bar]');
-  let lastTick = null;
-  let readySince = 0;
-  let cueTimer = null;
-
-  // Full-screen cue, readable from a distance or on the TV while holding the phone.
-  function updateCue() {
-    const st = detector.state;
-    cue.className = `cue ${st}`;
-    if (st === 'countdown') {
-      const left = Math.ceil(detector.countdownLeft ?? 0);
-      cueBig.textContent = String(Math.max(1, left));
-      cueSub.textContent = '휴대폰을 그립처럼 쥐고 어드레스 자세를 잡으세요';
-      cueBar.style.width = '0%';
-      if (left !== lastTick && left > 0) {
-        lastTick = left;
-        cues.tick();
-      }
-    } else if (st === 'waitStill') {
-      const p = detector.stillProgress;
-      cueBig.textContent = p > 0 ? '그대로…' : '멈추세요';
-      cueSub.textContent = '공 앞에서 어드레스 자세로 움직이지 마세요';
-      cueBar.style.width = `${Math.round(p * 100)}%`;
-    } else if (st === 'ready') {
-      cueBig.textContent = '스윙!';
-      cueSub.textContent = '작고 부드럽게 — 세게 휘둘러도 거리는 늘지 않습니다';
-      cueBar.style.width = '100%';
-      if (performance.now() - readySince > 6000) {
-        readySince = performance.now();
-        cues.reminder();
-      }
-    } else if (st === 'swinging') {
-      cueBig.textContent = '';
-      cueSub.textContent = '';
-    }
-  }
-
-  const detector = new SwingDetector({
-    onState: (s) => {
-      const [a, b] = STATE_TEXT[s] ?? [s, ''];
-      if (s !== 'cooldown') setStatus(a, b);
-      if (s === 'ready') {
-        readySince = performance.now();
-        cues.ready();
-      }
-      if (s === 'countdown') lastTick = null;
-      lock.classList.toggle('on', ['countdown', 'waitStill', 'ready', 'swinging'].includes(s));
-      updateCue();
+  const input = createSwingInput(el, {
+    setStatus,
+    getClub: () => settings.club,
+    canArm: () => {
+      if (settings.safetyAccepted) return true;
+      app.show('safety', { next: 'game' });
+      return false;
     },
-    onSwing: (r) => handleResult(r, null),
-    // Real-time contact sound, as close to the virtual impact as possible.
-    onImpact: (e) => {
-      cues.impact({ club: settings.club, power: e.peakOmega / (settings.game.referenceOmega || 11) });
-      impactPlayed = true;
-    },
+    onResult: (r, info) => handleResult(r, null, info),
   });
-  let impactPlayed = false;
+  input.onState((s) => {
+    armBtn.textContent = s === 'idle' ? '스윙 준비' : '중지';
+  });
 
-  function handleResult(r, label) {
+  function handleResult(r, label, info = {}) {
     if (!r.valid) {
       setStatus('발사하지 않음', REASON_TEXT[r.reason] ?? r.reason);
-      if (!label) cues.rejected();
-      impactPlayed = false;
       return;
     }
-    const { shot: preview } = shotFromAnalysis(r, settings.club);
-    // Live swings already heard the contact; replays hear it at launch.
-    if (!impactPlayed) cues.impact({ club: settings.club, power: preview.delivery.power, quality: preview.delivery.strikeQuality });
-    impactPlayed = false;
     const { shot, flight, features } = shotFromAnalysis(r, settings.club);
+    // Live swings already heard the contact; replays hear it at launch.
+    if (!info.impactPlayed) cues.impact({ club: settings.club, power: shot.delivery.power, quality: shot.delivery.strikeQuality });
     banner.textContent = label ? `시뮬레이션 재생: ${label} (실측 아님)` : '';
     banner.classList.toggle('show', !!label);
     setStatus(shot.shape.label, `${CLUBS[shot.club].label} · 파워 ${(shot.delivery.power * 100).toFixed(0)}%`);
@@ -170,32 +103,19 @@ export function createGameScreen(app) {
   }
 
   async function arm() {
-    if (detector.state !== 'idle') {
-      detector.disarm();
-      sensors.stop();
-      keepScreenOn(false);
-      armBtn.textContent = '스윙 준비';
-      lock.classList.remove('on');
-      setStatus(...STATE_TEXT.idle);
+    if (input.active) {
+      input.stop();
       return;
     }
-    unlockAudio();
-    if (!settings.safetyAccepted) {
-      app.show('safety', { next: 'game' });
-      return;
-    }
-    const r = await sensors.start(settings.sensorRateHz);
+    const r = await input.start();
+    if (r.blocked) return;
     if (!r.ok) {
       setStatus('센서를 사용할 수 없습니다', `${r.error} — "샘플 스윙"으로 테스트할 수 있습니다`);
       return;
     }
-    keepScreenOn(true);
     result.classList.remove('show');
     banner.classList.remove('show');
     scene.resetBall();
-    armBtn.textContent = '중지';
-    detector.analysis = sensors.analysisOptions();
-    detector.arm({ delaySeconds: 3 });
   }
 
   let sampleSeed = 1;
@@ -222,20 +142,6 @@ export function createGameScreen(app) {
     settings.club = clubSel.value;
     saveSettings();
   });
-  // Long-press to unlock touches while armed.
-  let pressTimer = null;
-  const unlockBtn = $(el, '[data-act=unlock]');
-  unlockBtn.addEventListener('pointerdown', () => {
-    pressTimer = setTimeout(() => {
-      lock.classList.remove('on');
-      detector.disarm();
-      sensors.stop();
-      armBtn.textContent = '스윙 준비';
-      setStatus(...STATE_TEXT.idle);
-    }, 1000);
-  });
-  ['pointerup', 'pointerleave', 'pointercancel'].forEach((ev) => unlockBtn.addEventListener(ev, () => clearTimeout(pressTimer)));
-
   return {
     el,
     enter(params = {}) {
@@ -247,8 +153,7 @@ export function createGameScreen(app) {
       scene.start();
       clubSel.value = settings.club;
       setStatus(...STATE_TEXT.idle);
-      unsub = sensors.onSample((s) => detector.push(s));
-      cueTimer = setInterval(updateCue, 100);
+      input.enter();
       pillTimer = setInterval(() => {
         if (sensors.running) {
           const hz = sensors.rateHz;
@@ -265,14 +170,8 @@ export function createGameScreen(app) {
     },
     leave() {
       document.body.classList.remove('wants-landscape');
-      detector.disarm();
-      sensors.stop();
-      keepScreenOn(false);
-      armBtn.textContent = '스윙 준비';
-      lock.classList.remove('on');
-      unsub?.();
+      input.leave();
       clearInterval(pillTimer);
-      clearInterval(cueTimer);
       scene?.stop();
     },
   };
