@@ -19,7 +19,7 @@ const FEATURE_ORDER = [
   ['handSpeed', '손 속도', 2],
   ['lagRetention', '래그 유지율 (임팩트/최대 각속도)', 3],
   ['releaseTimingMs', '릴리스 시점 (최대 각속도-임팩트)', 0],
-  ['forearmRollRate', '전완 회전 속도 (+ = 페이스 닫힘)', 2],
+  ['forearmRollRate', '전완 회전 속도 (참고용, + = 닫히는 방향)', 2],
   ['faceRollDeg', '페이스 회전 추정', 1],
   ['planeShiftDeg', '경로 변화 추정', 1],
   ['qualityScore', '스윙 완성도', 2],

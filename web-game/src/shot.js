@@ -13,18 +13,15 @@ export function swingFromFeatures(f) {
     planeShiftDeg: (settings.invertPath ? -1 : 1) * (f.planeShiftDeg ?? 0),
     qualityScore: f.qualityScore,
     lagRetention: f.lagRetention,
-    // Roll rate relative to swing speed; same sign convention as faceRollDeg.
-    rollRatio: f.omegaAtImpact > 0 && Number.isFinite(f.forearmRollRate) ? (faceSign * f.forearmRollRate) / f.omegaAtImpact : undefined,
   };
 }
 
 /** Short Korean description of the wrist action for the result card. */
-export function wristText(wrist) {
+export function wristText(wrist, faceAngle = 0) {
   if (!wrist) return '';
   const rel = wrist.release >= 0.8 ? '래그 유지' : wrist.release >= 0.4 ? '약간 이른 릴리스' : '이른 릴리스(캐스팅)';
-  const r = wrist.rollFaceDeg;
-  const roll = r < -1 ? '로테이션 빠름 → 페이스 닫힘' : r > 1 ? '로테이션 억제 → 페이스 열림' : '로테이션 보통';
-  return `${rel} · ${roll}`;
+  const face = faceAngle < -1 ? '페이스 닫힘(손목 굽힘·로테이션 많음)' : faceAngle > 1 ? '페이스 열림(손목 펴짐·로테이션 부족)' : '페이스 스퀘어';
+  return `${rel} · ${face}`;
 }
 
 export function shotFromAnalysis(result, club = settings.club) {
