@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createCourse, Round, scoreName } from '../src/index.js';
+import { createCourse, Round, scoreName, COURSES } from '../src/index.js';
 import { swingToShot } from '../../physics-engine/src/shot-model.js';
 import { simulateShot } from '../../physics-engine/src/flight.js';
 
@@ -18,8 +18,9 @@ function powerFor(club, dist) {
   return (lo + hi) / 2;
 }
 
-test('a straight-hitting bot can play all 18 holes to a sensible score', () => {
-  const round = new Round(course);
+for (const id of ['autumn', 'pinebeach']) {
+test(`${id}: a straight-hitting bot can play all 18 holes to a sensible score`, () => {
+  const round = new Round(createCourse(COURSES[id]));
   for (let h = 0; h < 18; h++) {
     if (h) round.nextHole();
     while (!round.holed) {
@@ -39,6 +40,8 @@ test('a straight-hitting bot can play all 18 holes to a sensible score', () => {
   assert.equal(t.par, 72);
   assert.ok(t.strokes >= 66 && t.strokes <= 95, `bot scored ${t.strokes}`);
 });
+
+}
 
 test('a ball hit into the sea costs a stroke and is replayed from the same spot', () => {
   const round = new Round(course, { startHole: 2 }); // hole 2 runs along the coast

@@ -47,15 +47,22 @@ function step(p, dist, headingDeg) {
   return { x: p.x + d.x * dist, z: p.z + d.z * dist };
 }
 
-/** Build hole geometry: tee, optional dogleg point, green, centreline. */
+/**
+ * Build hole geometry: tee, optional dogleg point, green, centreline.
+ * A spec either walks from the previous green (walk/heading/length/dogleg)
+ * or gives explicit points (tee, optional corner, green).
+ */
 export function buildHoles(specs = HOLE_SPECS, start = CLUBHOUSE) {
   const holes = [];
   let cursor = { ...start };
   specs.forEach((s, i) => {
-    const tee = step(cursor, s.walk[0], s.walk[1]);
+    const tee = s.tee ? { ...s.tee } : step(cursor, s.walk[0], s.walk[1]);
     const pts = [tee];
     let green;
-    if (s.dogleg) {
+    if (s.green) {
+      if (s.corner) pts.push({ ...s.corner });
+      green = { ...s.green };
+    } else if (s.dogleg) {
       const corner = step(tee, s.length * s.dogleg.at, s.heading);
       pts.push(corner);
       green = step(corner, s.length * (1 - s.dogleg.at), s.heading + s.dogleg.turn);
@@ -68,7 +75,9 @@ export function buildHoles(specs = HOLE_SPECS, start = CLUBHOUSE) {
       number: i + 1,
       name: s.name,
       par: s.par,
-      length: s.length,
+      length: s.length ?? Math.round(pts.reduce((a, p, k) => (k ? a + Math.hypot(p.x - pts[k - 1].x, p.z - pts[k - 1].z) : 0), 0)),
+      // Optional forced carry (e.g. over the sea): [from, to] as fractions of the hole.
+      carry: s.carry ?? null,
       tee,
       green,
       path: pts,

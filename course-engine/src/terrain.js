@@ -1,12 +1,15 @@
-// Terrain: a coastal mountain with the 18 holes carved into its slopes.
+// Terrain: a course's natural landform with its 18 holes carved into it.
 //
-// height(x, z) blends a natural landform (a mountain falling to the sea plus
-// fBm ridges) with smoothed corridors along every hole, flat tees and
-// gently tilted greens. Everything is analytic and deterministic, so the
-// renderer and the ball physics see exactly the same ground.
+// height(x, z) blends the course's natural landform (see courses/) with
+// smoothed corridors along every hole, flat tees and gently tilted greens.
+// A hole may have a forced carry (e.g. over the sea) where the corridor is
+// not built and the natural ground (or sea) shows. Everything is analytic
+// and deterministic, so the renderer and the ball physics see exactly the
+// same ground.
 
-import { fbm, smoothstep } from './noise.js';
-import { buildHoles, pathDistance, PEAK, CLUBHOUSE, dirOf } from './layout.js';
+import { smoothstep } from './noise.js';
+import { buildHoles, pathDistance, dirOf } from './layout.js';
+import { AUTUMN_COURSE } from './courses/autumn.js';
 
 export const SEA_LEVEL = 0;
 
@@ -22,18 +25,17 @@ export const COURSE_SURFACES = Object.freeze({
   water: { name: 'water', label: '바다', water: true, restitutionScale: 0, bounceFriction: 1, spinCheck: 0, rollingResistance: 10, lie: 0 },
 });
 
-function naturalHeight(x, z) {
-  const r2 = (x - PEAK.x) ** 2 + (z - PEAK.z) ** 2;
-  const mountain = 260 * Math.exp(-r2 / 845000) - 60;
-  const ridges = 34 * fbm(x / 300, z / 300, { octaves: 4, seed: 7 });
-  const detail = 5 * fbm(x / 55, z / 55, { octaves: 3, seed: 31 });
-  // Fade the noise out offshore so the sea floor stays smooth.
-  const land = smoothstep(-40, 20, mountain);
-  return mountain + (ridges + detail) * (0.35 + 0.65 * land);
+/** Fraction (0..1) of a hole's corridor that is suppressed at position s. */
+export function carryAmount(h, s) {
+  if (!h.carry) return 0;
+  const [a, b] = h.carry;
+  return smoothstep(a - 0.03, a + 0.03, s) * (1 - smoothstep(b - 0.03, b + 0.03, s));
 }
 
-export function createCourse() {
-  const holes = buildHoles();
+export function createCourse(def = AUTUMN_COURSE) {
+  const holes = buildHoles(def.specs, def.start);
+  const naturalHeight = def.natural(holes);
+  const CLUBHOUSE = def.clubhouse;
 
   // Per-hole elevation profile and features.
   let prevGreen = null;
@@ -94,7 +96,7 @@ export function createCourse() {
     const half = Math.max(h.fairwayHalfWidth, 14);
     let target = h.teeHeight + (h.greenHeight - h.teeHeight) * smoothstep(0, 1, pd.s);
     target += 1.8 * Math.sin(pd.s * Math.PI * 3 + h.number) * (1 - Math.abs(2 * pd.s - 1));
-    let w = smoothstep(half + 60, half + 8, pd.d);
+    let w = smoothstep(half + 60, half + 8, pd.d) * (1 - carryAmount(h, pd.s));
     let priority = 0;
     const dTee = Math.hypot(x - h.tee.x, z - h.tee.z);
     if (dTee < 22) {
@@ -163,7 +165,7 @@ export function createCourse() {
     if (Math.hypot(x - h.green.x, z - h.green.z) <= h.greenRadius) return COURSE_SURFACES.green;
     for (const b of h.bunkers) if (Math.hypot(x - b.x, z - b.z) <= b.r) return COURSE_SURFACES.bunker;
     if (Math.hypot(x - h.tee.x, z - h.tee.z) <= 7) return COURSE_SURFACES.tee;
-    const fairStart = h.par === 3 ? 0.8 : 0.16;
+    const fairStart = h.carry ? Math.max(0.8, h.carry[1]) : h.par === 3 ? 0.8 : 0.16;
     const half = h.par === 3 ? 10 : h.fairwayHalfWidth;
     if (c.d <= half && c.s >= fairStart) return COURSE_SURFACES.fairway;
     if (c.d <= Math.max(h.fairwayHalfWidth, 10) + 22) return COURSE_SURFACES.rough;
@@ -171,7 +173,11 @@ export function createCourse() {
   }
 
   return {
-    name: '단풍 바다 CC',
+    id: def.id,
+    name: def.name,
+    subtitle: def.subtitle,
+    theme: def.theme,
+    windScale: def.windScale ?? 1,
     holes,
     par: holes.reduce((a, h) => a + h.par, 0),
     heightAt,
@@ -179,7 +185,7 @@ export function createCourse() {
     surfaceAt,
     corridor,
     clubhouse: CLUBHOUSE,
-    bounds: { minX: -1300, maxX: 1300, minZ: -1300, maxZ: 1500 },
+    bounds: def.bounds,
   };
 }
 

@@ -93,7 +93,7 @@ export class Round {
   wind() {
     // Gentle autumn sea breeze per hole (deterministic), m/s world vector.
     const a = (this.holeIndex * 47) % 360;
-    const s = 1.5 + ((this.holeIndex * 7) % 5) * 0.6;
+    const s = (1.5 + ((this.holeIndex * 7) % 5) * 0.6) * (this.course.windScale ?? 1);
     return [Math.sin((a * Math.PI) / 180) * s, 0, Math.cos((a * Math.PI) / 180) * s];
   }
 

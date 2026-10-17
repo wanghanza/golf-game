@@ -1,4 +1,6 @@
-// "단풍 바다 CC": autumn mountain course with a sea view, rendered with three.js.
+// 3D course renderer (three.js). The look follows the course theme:
+// "autumn" (단풍 바다 CC, maples on a mountain) or "pinebeach" (seaside
+// clifftop links with black pines and golden zoysia).
 //
 // World (course-engine): x east, y up, z north. three.js: (x, y, -z).
 
@@ -26,7 +28,12 @@ function label(text, { color = '#fff', bg = 'rgba(40,20,10,0.6)', scale = 1 } = 
     g.roundRect(6, 6, w - 12, h - 12, 26);
     g.fill();
     g.fillStyle = color;
-    g.font = 'bold 64px system-ui, sans-serif';
+    let size = 64;
+    g.font = `bold ${size}px system-ui, sans-serif`;
+    while (size > 28 && g.measureText(text).width > w - 48) {
+      size -= 4;
+      g.font = `bold ${size}px system-ui, sans-serif`;
+    }
     g.textAlign = 'center';
     g.textBaseline = 'middle';
     g.fillText(text, w / 2, h / 2 + 3);
@@ -56,10 +63,49 @@ const AUTUMN = {
   pine: [0.16, 0.3, 0.18],
 };
 
+// Per-course look. Colours are linear RGB triplets.
+const THEMES = {
+  autumn: {
+    fog: 0xe8cfa8,
+    steps: { terrain: '산악 지형', trees: '단풍 숲', leaves: '낙엽' },
+    leaves: true,
+    pineShare: 0,
+    floor: (n) => [0.55 + 0.12 * n, 0.3 + 0.08 * n, 0.12 + 0.04 * n], // leaf litter
+    rough: (n) => [0.52 + 0.05 * n, 0.55 + 0.05 * n, 0.24],
+    low: [0.83, 0.76, 0.58], // beach
+    rock: [0.47, 0.43, 0.38],
+    fairway: [[0.34, 0.58, 0.19], [0.28, 0.5, 0.16]],
+    patchRough: [0.47, 0.47, 0.17],
+    patchFloor: (nz) => [0.56 + nz * 3, 0.31 + nz, 0.12],
+    pine: [0.16, 0.3, 0.18],
+    roof: 0x7a3b26,
+    signBg: 'rgba(122,59,38,0.85)',
+    maxTrees: 5200,
+  },
+  pinebeach: {
+    fog: 0xcfdce6,
+    steps: { terrain: '해안 절벽', trees: '해송 숲', leaves: '바닷바람' },
+    leaves: false,
+    pineShare: 1,
+    floor: (n) => [0.36 + 0.06 * n, 0.4 + 0.06 * n, 0.2], // pine needles and grass
+    rough: (n) => [0.66 + 0.05 * n, 0.57 + 0.05 * n, 0.32], // golden zoysia rough
+    low: [0.42, 0.4, 0.37], // wave-cut rock
+    rock: [0.44, 0.4, 0.36],
+    fairway: [[0.42, 0.6, 0.2], [0.36, 0.53, 0.17]], // zoysia (금잔디) fairway
+    patchRough: [0.64, 0.56, 0.3],
+    patchFloor: (nz) => [0.36 + nz * 2, 0.4 + nz * 2, 0.2],
+    pine: [0.1, 0.22, 0.14], // black pine (해송)
+    roof: 0x2f4a5c,
+    signBg: 'rgba(30,60,80,0.85)',
+    maxTrees: 4200,
+  },
+};
+
 export class CourseScene {
   constructor(host, course, { onProgress } = {}) {
     this.host = host;
     this.course = course;
+    this.theme = THEMES[course.theme] ?? THEMES.autumn;
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -67,7 +113,7 @@ export class CourseScene {
     this.renderer.toneMappingExposure = 0.92;
     host.appendChild(this.renderer.domElement);
     this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.Fog(0xe8cfa8, 700, 5200);
+    this.scene.fog = new THREE.Fog(this.theme.fog, 700, 5200);
     this.camera = new THREE.PerspectiveCamera(55, 16 / 9, 0.1, 30000);
     this.clock = new THREE.Clock();
     this.time = 0;
@@ -86,12 +132,12 @@ export class CourseScene {
   async build() {
     const steps = [
       ['하늘과 바다', () => this._buildSkyAndSea()],
-      ['산악 지형', () => this._buildTerrain()],
+      [this.theme.steps.terrain, () => this._buildTerrain()],
       ['페어웨이와 그린', () => this._buildHoles()],
-      ['단풍 숲', () => this._buildTrees()],
+      [this.theme.steps.trees, () => this._buildTrees()],
       ['클럽하우스', () => this._buildClubhouse()],
       ['공과 깃발', () => this._buildBallAndMarkers()],
-      ['낙엽', () => this._buildLeaves()],
+      [this.theme.steps.leaves, () => this.theme.leaves && this._buildLeaves()],
     ];
     for (let i = 0; i < steps.length; i++) {
       this.onProgress(i / steps.length, steps[i][0]);
@@ -126,7 +172,7 @@ export class CourseScene {
     );
     this.scene.add(sky);
 
-    this.seaUniforms = { time: { value: 0 }, sunDir: { value: SUN_DIR }, fogColor: { value: new THREE.Color(0xe8cfa8) } };
+    this.seaUniforms = { time: { value: 0 }, sunDir: { value: SUN_DIR }, fogColor: { value: new THREE.Color(this.theme.fog) } };
     const sea = new THREE.Mesh(
       new THREE.PlaneGeometry(60000, 60000, 1, 1),
       new THREE.ShaderMaterial({
@@ -197,14 +243,15 @@ export class CourseScene {
         pos[k * 3 + 1] = y;
         pos[k * 3 + 2] = -z;
         const n = fbm(x / 40, z / 40, { octaves: 3, seed: 99 });
+        const T = this.theme;
         if (y < 3) {
-          tmp.setRGB(0.83, 0.76, 0.58); // beach
+          tmp.setRGB(...T.low);
         } else {
           const s = c.surfaceAt(x, z).name;
           const nn = c.normalAt(x, z);
-          if (nn.y < 0.78) tmp.setRGB(0.47, 0.43, 0.38); // rock
-          else if (s === 'forest') tmp.setRGB(0.55 + 0.12 * n, 0.3 + 0.08 * n, 0.12 + 0.04 * n); // leaf litter
-          else tmp.setRGB(0.52 + 0.05 * n, 0.55 + 0.05 * n, 0.24); // golden rough
+          if (nn.y < 0.78) tmp.setRGB(T.rock[0] + 0.05 * n, T.rock[1] + 0.05 * n, T.rock[2] + 0.04 * n);
+          else if (s === 'forest') tmp.setRGB(...T.floor(n));
+          else tmp.setRGB(...T.rough(n));
         }
         col[k * 3] = tmp.r;
         col[k * 3 + 1] = tmp.g;
@@ -271,14 +318,16 @@ export class CourseScene {
         const surf = c.surfaceAt(x, z).name;
         const stripe = Math.floor(dist / 12) % 2 === 0;
         const nz = fbm(x / 9, z / 9, { octaves: 2, seed: 5 }) * 0.04;
+        const T = this.theme;
+        const fw = T.fairway[stripe ? 0 : 1];
         switch (surf) {
-          case 'fairway': tmp.setRGB((stripe ? 0.34 : 0.28) + nz, (stripe ? 0.58 : 0.5) + nz, (stripe ? 0.19 : 0.16)); break;
+          case 'fairway': tmp.setRGB(fw[0] + nz, fw[1] + nz, fw[2]); break;
           case 'green': tmp.setRGB(0.2 + nz * 0.5, 0.52 + nz * 0.5, 0.17); break;
           case 'tee': tmp.setRGB(0.3, 0.58, 0.2); break;
           case 'bunker': tmp.setRGB(0.9, 0.84, 0.66); break;
-          case 'rough': tmp.setRGB(0.47 + nz, 0.47 + nz, 0.17); break;
-          case 'water': tmp.setRGB(0.83, 0.76, 0.58); break;
-          default: tmp.setRGB(0.56 + nz * 3, 0.31 + nz, 0.12); // leaf litter
+          case 'rough': tmp.setRGB(T.patchRough[0] + nz, T.patchRough[1] + nz, T.patchRough[2]); break;
+          case 'water': tmp.setRGB(...T.low); break;
+          default: tmp.setRGB(...T.patchFloor(nz));
         }
         col.push(tmp.r, tmp.g, tmp.b);
       }
@@ -339,7 +388,7 @@ export class CourseScene {
     const r = rng(42);
     const { minX, maxX, minZ, maxZ } = c.bounds;
     const items = [];
-    const maxTrees = 5200;
+    const maxTrees = this.theme.maxTrees;
     for (let tries = 0; tries < 60000 && items.length < maxTrees; tries++) {
       const x = minX + r() * (maxX - minX);
       const z = minZ + r() * (maxZ - minZ);
@@ -354,7 +403,8 @@ export class CourseScene {
       if (fbm(x / 120, z / 120, { octaves: 2, seed: 3 }) < -0.35) continue; // clearings
       if (Math.hypot(x - c.clubhouse.x, z - c.clubhouse.z) < 70) continue;
       const v = fbm(x / 90, z / 90, { octaves: 2, seed: 11 }) + (r() - 0.5) * 0.6;
-      const type = y > 150 && r() < 0.5 ? 'pine' : v < -0.2 ? 'pine' : v < 0.05 ? 'mapleRed' : v < 0.25 ? 'mapleOrange' : v < 0.4 ? 'oak' : 'ginkgo';
+      // Wind-bent black pines on the clifftops; maples and ginkgo on the mountain.
+      const type = r() < this.theme.pineShare || (y > 150 && r() < 0.5) ? 'pine' : v < -0.2 ? 'pine' : v < 0.05 ? 'mapleRed' : v < 0.25 ? 'mapleOrange' : v < 0.4 ? 'oak' : 'ginkgo';
       items.push({ x, y, z, type, s: 0.8 + r() * 0.7, rot: r() * Math.PI * 2, shade: 0.85 + r() * 0.3 });
     }
     const trunkGeo = new THREE.CylinderGeometry(0.25, 0.4, 4, 5);
@@ -388,12 +438,20 @@ export class CourseScene {
       col.setRGB(rr * t.shade, gg * t.shade, bb * t.shade);
       crowns.setColorAt(i, col);
     });
+    const bent = this.theme.pineShare > 0; // wind-shaped seaside pines: lower, wider, leaning
+    const tilt = new THREE.Quaternion();
     pines.forEach((t, i) => {
       q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), t.rot);
-      sc.set(t.s, t.s * 1.1, t.s);
+      if (bent) {
+        tilt.setFromAxisAngle(new THREE.Vector3(Math.cos(t.rot), 0, Math.sin(t.rot)), 0.08 + 0.12 * (t.shade - 0.85));
+        q.premultiply(tilt);
+        sc.set(t.s * 1.35, t.s * 0.85, t.s * 1.35);
+      } else {
+        sc.set(t.s, t.s * 1.1, t.s);
+      }
       m.compose(V(t.x, t.y - 0.3, t.z), q, sc);
       pineMesh.setMatrixAt(i, m);
-      const [rr, gg, bb] = AUTUMN.pine;
+      const [rr, gg, bb] = this.theme.pine;
       col.setRGB(rr * t.shade, gg * t.shade, bb * t.shade);
       pineMesh.setColorAt(i, col);
     });
@@ -407,11 +465,11 @@ export class CourseScene {
     const y = c.heightAt(x, z);
     const body = new THREE.Mesh(new THREE.BoxGeometry(34, 8, 18), new THREE.MeshLambertMaterial({ color: 0xefe3cc }));
     body.position.copy(V(x, y + 4, z));
-    const roof = new THREE.Mesh(new THREE.ConeGeometry(24, 7, 4), new THREE.MeshLambertMaterial({ color: 0x7a3b26 }));
+    const roof = new THREE.Mesh(new THREE.ConeGeometry(24, 7, 4), new THREE.MeshLambertMaterial({ color: this.theme.roof }));
     roof.rotation.y = Math.PI / 4;
     roof.scale.set(1.05, 1, 0.6);
     roof.position.copy(V(x, y + 11.5, z));
-    const sign = label('단풍 바다 CC', { bg: 'rgba(122,59,38,0.85)' });
+    const sign = label(c.name, { bg: this.theme.signBg });
     sign.position.copy(V(x, y + 17, z));
     this.scene.add(body, roof, sign);
   }
@@ -568,6 +626,22 @@ export class CourseScene {
 
   stop() {
     this.running = false;
+  }
+
+  /** Release GPU resources and remove the canvas (used when switching courses). */
+  dispose() {
+    this.stop();
+    window.removeEventListener('resize', this.resize);
+    this.scene.traverse((o) => {
+      o.geometry?.dispose();
+      const m = o.material;
+      for (const mm of Array.isArray(m) ? m : m ? [m] : []) {
+        mm.map?.dispose();
+        mm.dispose();
+      }
+    });
+    this.renderer.dispose();
+    this.renderer.domElement.remove();
   }
 
   _loop() {
