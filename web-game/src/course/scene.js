@@ -9,6 +9,8 @@ import { fbm } from '../../../course-engine/src/noise.js';
 import { pointAlong, dirAt } from '../../../course-engine/src/terrain.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, -z);
+const EYE_HEIGHT = 1.65; // m, camera height in the golfer's view
+const EYE_BACK = 2.6; // m behind the ball
 const SUN_DIR = new THREE.Vector3(-0.55, 0.32, 0.77).normalize(); // low autumn sun in the south-west (three coords)
 
 function canvasTexture(w, h, draw) {
@@ -530,6 +532,7 @@ export class CourseScene {
 
   setBall(p) {
     this.ballWorld = { ...p };
+    this.ball.scale.setScalar(1);
     this.landMarker.visible = false;
     this.ball.position.copy(V(p.x, p.y + 0.09, p.z));
   }
@@ -568,19 +571,20 @@ export class CourseScene {
     const dx = Math.sin(hd);
     const dz = Math.cos(hd);
     const putt = this.aimDistance < 30;
-    const back = putt ? 3.2 : 8;
-    const up = putt ? 1.6 : 4;
+    // A golfer's view: standing just behind the ball at eye height.
+    const back = putt ? 3.2 : EYE_BACK;
+    const up = putt ? 1.6 : EYE_HEIGHT;
     const look = Math.min(this.aimDistance, putt ? this.aimDistance : 150);
     const cx = b.x - dx * back;
     const cz = b.z - dz * back;
-    // See over a crest in front of the ball.
+    // Rise only as much as needed to see over a crest right in front.
     let crest = b.y;
-    for (let t = 5; t <= Math.min(look, 60); t += 5) crest = Math.max(crest, this.course.heightAt(b.x + dx * t, b.z + dz * t));
-    const cy = Math.max(this.course.heightAt(cx, cz) + up, b.y + up, crest + (putt ? 0.8 : 2));
+    for (let t = 5; t <= Math.min(look, 40); t += 5) crest = Math.max(crest, this.course.heightAt(b.x + dx * t, b.z + dz * t));
+    const cy = Math.max(this.course.heightAt(cx, cz) + up, b.y + up, crest + (putt ? 0.8 : 0.6));
     this.camGoalPos.copy(V(cx, cy, cz));
     const tx = b.x + dx * look;
     const tz = b.z + dz * look;
-    this.camGoalTarget.copy(V(tx, this.course.heightAt(tx, tz) + (putt ? 0 : 1.5), tz));
+    this.camGoalTarget.copy(V(tx, this.course.heightAt(tx, tz) + (putt ? 0 : 1.2), tz));
     if (snap) {
       this.camPos.copy(this.camGoalPos);
       this.camTarget.copy(this.camGoalTarget);
@@ -706,15 +710,27 @@ export class CourseScene {
       const k = span > 0 ? Math.min(1, (f.t - a.t) / span) : 1;
       const bp = { x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k, z: a.z + (b.z - a.z) * k };
       this.ball.position.copy(V(bp.x, bp.y + 0.09, bp.z));
+      // Watch the ball like the golfer: stay at eye height behind the ball
+      // and turn to follow it; once it is far away, walk the camera after it
+      // (still near eye height) so the ball stays large enough to see.
       const start = pts[0];
       const vx = bp.x - start.x;
       const vz = bp.z - start.z;
-      const l = Math.hypot(vx, vz) || 1;
-      const back = Math.min(18, 7 + (bp.y - start.y) * 0.3);
-      const cx = bp.x - (vx / l) * back;
-      const cz = bp.z - (vz / l) * back;
-      this.camGoalPos.copy(V(cx, Math.max(c.heightAt(cx, cz) + 3, bp.y + 3), cz));
-      this.camGoalTarget.copy(V(bp.x + (vx / l) * 10, bp.y, bp.z + (vz / l) * 10));
+      const l = Math.hypot(vx, vz);
+      const ux = l > 1 ? vx / l : Math.sin((this.aimHeading * Math.PI) / 180);
+      const uz = l > 1 ? vz / l : Math.cos((this.aimHeading * Math.PI) / 180);
+      if (f.eye === undefined) f.eye = { x: start.x - ux * EYE_BACK, z: start.z - uz * EYE_BACK };
+      const followGap = 70;
+      const along = Math.max(0, l - followGap);
+      const cx = f.eye.x + ux * along;
+      const cz = f.eye.z + uz * along;
+      const ground = c.heightAt(cx, cz);
+      const lift = along > 0 ? Math.min(25, Math.max(0, bp.y - ground) * 0.25) : 0;
+      this.camGoalPos.copy(V(cx, Math.max(ground + EYE_HEIGHT + lift, start.y + EYE_HEIGHT - along * 0.05), cz));
+      this.camGoalTarget.copy(V(bp.x, bp.y, bp.z));
+      // Keep the ball visible at long range.
+      const camDist = this.camera.position.distanceTo(this.ball.position);
+      this.ball.scale.setScalar(Math.min(8, Math.max(1, camDist / 30)));
       if (f.idx >= pts.length - 1 && !f.done) {
         f.done = true;
         setTimeout(() => f.onDone?.(f.result), 900);
@@ -722,7 +738,8 @@ export class CourseScene {
     }
     const lerp = 1 - Math.exp(-dt * (this.mode === 'flight' ? 2.2 : 3));
     this.camPos.lerp(this.camGoalPos, lerp);
-    this.camTarget.lerp(this.camGoalTarget, lerp);
+    // In flight the view turns quickly to keep the ball near the centre.
+    this.camTarget.lerp(this.camGoalTarget, this.mode === 'flight' ? 1 - Math.exp(-dt * 9) : lerp);
     this.camera.position.copy(this.camPos);
     this.camera.lookAt(this.camTarget);
     this._updateLeaves(dt);

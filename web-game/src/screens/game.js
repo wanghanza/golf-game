@@ -7,7 +7,7 @@ import { generateSwing } from '../../../data-tools/src/synth.js';
 import { analyzeSwing } from '../../../swing-engine/src/analyze.js';
 import { CLUBS, CLUB_ORDER } from '../../../physics-engine/src/clubs.js';
 import { settings, saveSettings, fmtDist } from '../settings.js';
-import { shotFromAnalysis, wristText } from '../shot.js';
+import { shotFromAnalysis, wristText, swingFromFeatures, explainRealShot } from '../shot.js';
 import { cues, unlockAudio } from '../cues.js';
 import { createSwingInput, STATE_TEXT } from '../ui/swing-input.js';
 
@@ -64,6 +64,7 @@ export function createGameScreen(app) {
       return;
     }
     const { shot, flight, features } = shotFromAnalysis(r, settings.club);
+    if (!label) explainRealShot(input, swingFromFeatures(features), settings.club);
     // Live swings already heard the contact; replays hear it at launch.
     if (!info.impactPlayed) cues.impact({ club: settings.club, power: shot.delivery.power, quality: shot.delivery.strikeQuality });
     banner.textContent = label ? `시뮬레이션 재생: ${label} (실측 아님)` : '';

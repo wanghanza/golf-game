@@ -2,7 +2,8 @@
 import { swingToShot } from '../../physics-engine/src/shot-model.js';
 import { simulateShot } from '../../physics-engine/src/flight.js';
 import { featureValues } from '../../swing-engine/src/analyze.js';
-import { settings } from './settings.js';
+import { settings, saveSettings, fmtDist } from './settings.js';
+import { compareToIdeal } from '../../physics-engine/src/shot-compare.js';
 
 /** Feature values (from featureValues) -> swing input for swingToShot. */
 export function swingFromFeatures(f) {
@@ -33,4 +34,29 @@ export function shotFromAnalysis(result, club = settings.club) {
   const shot = swingToShot(swingFromFeatures(f), club, settings.game);
   const flight = simulateShot(shot.launch, { sampleEvery: 4 });
   return { shot, flight, features: f };
+}
+
+/**
+ * After a real (sensor) swing: explain the shot against a clean virtual
+ * swing in the verdict panel, and offer to make this player's typical swing
+ * the 100% reference when they swing much faster than it.
+ */
+export function explainRealShot(input, swing, club) {
+  input.recordPeak(swing.peakOmega);
+  const cmp = compareToIdeal(swing, club, settings.game);
+  const typical = input.typicalPeak();
+  const ref = settings.game.referenceOmega || 11;
+  const calibrate =
+    typical && Math.abs(typical - ref) / ref > 0.25
+      ? {
+          omega: typical,
+          apply: () => {
+            settings.game.referenceOmega = Math.round(typical * 10) / 10;
+            saveSettings();
+            input.diag.clearCompare();
+          },
+        }
+      : null;
+  input.diag.showCompare(cmp, { fmtDist: (m) => fmtDist(m), calibrate });
+  return cmp;
 }
