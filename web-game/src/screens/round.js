@@ -1,4 +1,4 @@
-// Course round: 18 holes on "단풍 바다 CC".
+// Course round: 18 holes on one of the courses (course-engine/src/courses).
 import { h, $, esc } from '../util.js';
 import { sensors } from '../sensors.js';
 import { REASON_TEXT } from '../../../swing-engine/src/analyze.js';
@@ -7,8 +7,9 @@ import { CLUBS, CLUB_ORDER } from '../../../physics-engine/src/clubs.js';
 import { swingToShot } from '../../../physics-engine/src/shot-model.js';
 import { simulateShot } from '../../../physics-engine/src/flight.js';
 import { createCourse, headingTo } from '../../../course-engine/src/terrain.js';
+import { COURSES } from '../../../course-engine/src/courses/index.js';
 import { Round, scoreName, PUTT_MAX_DISTANCE } from '../../../course-engine/src/round.js';
-import { settings, fmtDist } from '../settings.js';
+import { settings, saveSettings, fmtDist } from '../settings.js';
 import { cues, unlockAudio } from '../cues.js';
 import { swingFromFeatures } from '../shot.js';
 import { createSwingInput, STATE_TEXT } from '../ui/swing-input.js';
@@ -25,7 +26,7 @@ export function createRoundScreen(app) {
     <div id="round-canvas-host" style="position:absolute;inset:0"></div>
     <div class="topbar">
       <button data-act="back">← 메뉴</button>
-      <span class="title">단풍 바다 CC</span>
+      <span class="title" data-el="title">코스</span>
       <select data-act="club">${[...CLUB_ORDER, 'putter'].map((k) => `<option value="${k}">${CLUB_LABEL(k)}</option>`).join('')}</select>
       <span class="pill" data-el="sensor">센서 꺼짐</span>
     </div>
@@ -44,7 +45,7 @@ export function createRoundScreen(app) {
       <button data-act="right">▶</button>
     </div>
     <div class="modal" data-el="modal"></div>
-    <div class="loading" data-el="loading"><div><b>단풍 바다 CC</b><span data-el="load-text">코스를 준비하고 있습니다…</span><div class="cue-bar"><i data-el="load-bar"></i></div></div></div>
+    <div class="loading" data-el="loading"><div><b data-el="load-title">코스</b><span data-el="load-text">코스를 준비하고 있습니다…</span><div class="cue-bar"><i data-el="load-bar"></i></div></div></div>
   </section>`);
 
   const status = $(el, '[data-el=status]');
@@ -305,10 +306,19 @@ export function createRoundScreen(app) {
   });
   clubSel.addEventListener('change', () => setClub(clubSel.value));
 
-  async function ensureWorld() {
-    if (scene) return;
+  let courseId = null;
+  async function ensureWorld(id) {
+    if (scene && courseId === id) return;
+    if (scene) {
+      scene.dispose();
+      scene = null;
+    }
+    courseId = id;
+    const def = COURSES[id];
+    $(el, '[data-el=title]').textContent = def.name;
+    $(el, '[data-el=load-title]').textContent = def.name;
     loading.classList.add('show');
-    course = createCourse();
+    course = createCourse(def);
     scene = new CourseScene($(el, '#round-canvas-host'), course, {
       onProgress: (p, text) => {
         $(el, '[data-el=load-bar]').style.width = `${Math.round(p * 100)}%`;
@@ -331,8 +341,13 @@ export function createRoundScreen(app) {
 
   return {
     el,
-    async enter() {
+    async enter(params = {}) {
       document.body.classList.add('wants-landscape');
+      const id = COURSES[params.course] ? params.course : courseId ?? (COURSES[settings.course] ? settings.course : 'autumn');
+      if (settings.course !== id) {
+        settings.course = id;
+        saveSettings();
+      }
       input.enter();
       pillTimer = setInterval(() => {
         if (sensors.running) {
@@ -344,8 +359,8 @@ export function createRoundScreen(app) {
           sensorPill.className = 'pill';
         }
       }, 500);
-      if (scene) scene.start();
-      await ensureWorld();
+      if (scene && courseId === id) scene.start();
+      await ensureWorld(id);
     },
     leave() {
       document.body.classList.remove('wants-landscape');

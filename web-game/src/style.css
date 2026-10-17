@@ -53,6 +53,8 @@ label { color: var(--muted); font-size: 13px; }
 .menu button span { color: var(--muted); font-size: 13px; }
 .menu button.primary { background: var(--accent); color: var(--accent-ink); }
 .menu button.primary span { color: #23431f; }
+.menu button.primary.alt { background: #7fc4dc; }
+.menu button.primary.alt span { color: #173a48; }
 .home .foot { margin-top: auto; padding-top: 12px; color: var(--muted); font-size: 12px; }
 
 /* ---------- top bar ---------- */

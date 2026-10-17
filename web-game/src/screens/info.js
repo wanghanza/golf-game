@@ -4,6 +4,7 @@ import { settings, saveSettings, DEFAULT_SETTINGS } from '../settings.js';
 import { PLAYER_LEVELS } from '../../../physics-engine/src/game-config.js';
 import { CLUBS, CLUB_ORDER } from '../../../physics-engine/src/clubs.js';
 import { isAndroidApp } from '../platform.js';
+import { COURSES, COURSE_ORDER } from '../../../course-engine/src/courses/index.js';
 
 export function createHomeScreen(app) {
   const el = h(`
@@ -11,7 +12,7 @@ export function createHomeScreen(app) {
     <h1>⛳ Golf Swing Reader</h1>
     <p class="sub">휴대폰을 골프채처럼 쥐고 가볍게 스윙하면 센서 값으로 공이 날아갑니다 · ${isAndroidApp() ? '안드로이드 앱' : '웹 버전'}</p>
     <div class="menu">
-      <button class="primary" data-go="round"><b>코스 라운드 · 18홀</b><span>단풍 바다 CC — 가을 산악 코스, 바다 전망</span></button>
+${COURSE_ORDER.map((id, i) => `      <button class="${i === 0 ? 'primary' : 'primary alt'}" data-go="round" data-course="${id}"><b>코스 라운드 · ${COURSES[id].name}</b><span>${COURSES[id].subtitle}</span></button>`).join('\n')}
       <button data-go="game"><b>연습장</b><span>휴대폰을 휘둘러 3D 연습장에서 샷</span></button>
       <button data-go="simulate"><b>시뮬레이션 테스트</b><span>저장·합성 데이터로 스윙 재현 후 발사</span></button>
       <button data-go="recorder"><b>센서 분석 · 수집</b><span>6축 센서 그래프, 기록, CSV/JSON 내보내기</span></button>
@@ -22,8 +23,8 @@ export function createHomeScreen(app) {
     <div class="foot">스마트폰 센서로는 클럽 헤드 속도·페이스 각·공 스핀을 직접 측정할 수 없습니다. 화면의 볼 스피드·스핀·비거리는 가상 클럽 모델의 추정값입니다.</div>
   </section>`);
   el.addEventListener('click', (e) => {
-    const go = e.target.closest('[data-go]')?.dataset.go;
-    if (go) app.show(go);
+    const btn = e.target.closest('[data-go]');
+    if (btn) app.show(btn.dataset.go, btn.dataset.course ? { course: btn.dataset.course } : undefined);
   });
   return { el, enter() {}, leave() {} };
 }

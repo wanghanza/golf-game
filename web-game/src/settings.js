@@ -13,6 +13,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   invertPath: false,
   swingDirection: 1,
   addressSeconds: 3,
+  course: 'autumn',
   game: { ...DEFAULT_GAME_CONFIG },
 });
 
