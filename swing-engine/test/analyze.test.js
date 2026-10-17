@@ -152,24 +152,82 @@ test('countdown delays the address check, then the swing is detected', () => {
   assert.equal(results.filter((r) => r.valid).length, 1);
 });
 
-test('live impact cue fires once near the real impact, never for a shake or an aborted swing; slow swings complete', () => {
-  for (const [type, expected] of [['normal', 1], ['draw', 1], ['half', 1], ['slow', 1], ['shake', 0], ['incomplete', 0]]) {
-    const { samples, meta } = generateSwing({ type, seed: 5 });
+test('phase detector: address 3 s -> backswing -> top -> downswing -> impact, for every real swing type', () => {
+  for (const type of ['normal', 'draw', 'fade', 'half', 'fast', 'slow']) {
+    for (const seed of [1, 5]) {
+      const { samples, meta } = generateSwing({ type, seed });
+      const hits = [];
+      const states = [];
+      const results = [];
+      const det = new SwingDetector({ onImpact: (e) => hits.push(e), onState: (x) => states.push(x), onSwing: (r) => results.push(r), config: { autoRearm: false } });
+      det.arm();
+      for (const s of samples) det.push(s);
+      const last = samples.at(-1);
+      for (let i = 1; i <= 400; i++) det.push({ ...last, t: last.t + i / 200, gx: 0, gy: 0, gz: 0 });
+      assert.deepEqual(states.slice(0, 7), ['waitStill', 'ready', 'backswing', 'top', 'downswing', 'follow', 'cooldown'], `${type}/${seed}`);
+      assert.equal(hits.length, 1, type);
+      const err = hits[0].t - meta.truth.impact;
+      assert.ok(Math.abs(err) < 0.05, `${type}: live impact ${(err * 1000).toFixed(0)} ms from truth`);
+      assert.equal(results.length, 1);
+      assert.equal(results[0].valid, true, `${type}: ${results[0].reason}`);
+      // Live phase times line up with the generator's truth.
+      assert.ok(Math.abs(results[0].livePhases.backswingStart - meta.truth.addressEnd) < 0.25, `${type} takeaway`);
+      assert.ok(Math.abs(results[0].livePhases.top - meta.truth.top) < 0.15, `${type} top`);
+    }
+  }
+});
+
+test('phase detector never launches for a shake or an aborted downswing', () => {
+  for (const type of ['shake', 'incomplete']) {
+    const { samples } = generateSwing({ type, seed: 2 });
     const hits = [];
-    const det = new SwingDetector({ onImpact: (e) => hits.push(e), config: { autoRearm: false } });
-    det.arm();
     const results = [];
-    det.onSwing = (r) => results.push(r);
+    const det = new SwingDetector({ onImpact: (e) => hits.push(e), onSwing: (r) => results.push(r), config: { autoRearm: false } });
+    det.arm();
     for (const s of samples) det.push(s);
     const last = samples.at(-1);
     for (let i = 1; i <= 400; i++) det.push({ ...last, t: last.t + i / 200, gx: 0, gy: 0, gz: 0 });
-    assert.equal(hits.length, expected, type);
-    assert.equal(results.length, 1, `${type}: one analysis per motion`);
-    if (expected) assert.equal(results[0].valid, true, `${type}: ${results[0].reason}`);
-    if (expected) {
-      const err = hits[0].t - meta.truth.impact;
-      // Slightly early on purpose (5% before full return) to offset audio output latency.
-      assert.ok(err > -0.15 && err < 0.05, `${type}: live impact ${(err * 1000).toFixed(0)} ms from truth`);
-    }
+    assert.equal(hits.length, 0, type);
+    assert.equal(results.filter((r) => r.valid).length, 0, type);
   }
+});
+
+test('address needs 3 s of stillness with the phone tilted down', () => {
+  const still = (t, ay) => ({ t, ax: 0, ay, az: Math.sqrt(Math.max(0, 9.80665 ** 2 - ay * ay)), gx: 0.01, gy: 0, gz: 0 });
+  // Flat phone (top level with the horizon): never ready.
+  let det = new SwingDetector({ config: { autoRearm: false } });
+  const hints = [];
+  det.onHint = (h) => hints.push(h);
+  det.arm();
+  for (let i = 0; i < 1000; i++) det.push(still(i / 200, 0));
+  assert.equal(det.state, 'waitStill');
+  assert.ok(hints.some((h) => h && h.includes('아래')));
+  // Tilted down: ready after 3 s, not before.
+  det = new SwingDetector({ config: { autoRearm: false } });
+  det.arm();
+  for (let i = 0; i < 590; i++) det.push(still(i / 200, -8));
+  assert.equal(det.state, 'waitStill');
+  for (let i = 590; i < 640; i++) det.push(still(i / 200, -8));
+  assert.equal(det.state, 'ready');
+});
+
+test('a takeaway toward the screen side is rejected (backswing goes toward the back)', () => {
+  const { samples } = generateSwing({ type: 'normal', seed: 3 });
+  // Mirror the rotation about x: the takeaway now turns toward the screen.
+  const mirrored = samples.map((s) => ({ ...s, gx: -s.gx }));
+  const hints = [];
+  const results = [];
+  const det = new SwingDetector({ onHint: (h) => h && hints.push(h), onSwing: (r) => results.push(r), config: { autoRearm: false } });
+  det.arm();
+  for (const s of mirrored) det.push(s);
+  assert.equal(results.filter((r) => r.valid).length, 0);
+  assert.ok(hints.some((h) => h.includes('뒷면')));
+  // The same data is accepted with the direction setting flipped.
+  const ok = [];
+  const det2 = new SwingDetector({ onSwing: (r) => ok.push(r), config: { autoRearm: false, direction: -1 } });
+  det2.arm();
+  for (const s of mirrored) det2.push(s);
+  const last = mirrored.at(-1);
+  for (let i = 1; i <= 400; i++) det2.push({ ...last, t: last.t + i / 200, gx: 0, gy: 0, gz: 0 });
+  assert.equal(ok.length, 1);
 });

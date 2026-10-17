@@ -39,6 +39,9 @@ export function createSettingsScreen(app) {
         <select data-k="club">${CLUB_ORDER.map((k) => `<option value="${k}">${CLUBS[k].label}</option>`).join('')}</select>
         <label>거리 단위</label>
         <select data-k="units"><option value="m">미터 (m)</option><option value="yd">야드 (yd)</option></select>
+        <label>어드레스 정지 시간 (초)</label>
+        <select data-k="addressSeconds"><option value="2">2초</option><option value="3">3초 (기본)</option><option value="4">4초</option><option value="5">5초</option></select>
+        <label><input type="checkbox" data-k="swingDirectionFlip" /> 스윙 방향 반전 (백스윙이 휴대폰 화면 쪽으로 올라가게 쥐는 경우)</label>
         <label>센서 요청 속도</label>
         <select data-k="sensorRateHz"><option value="100">100 Hz</option><option value="200">200 Hz</option></select>
       </div>
@@ -68,7 +71,8 @@ export function createSettingsScreen(app) {
 
   function render() {
     el.querySelectorAll('[data-k]').forEach((i) => {
-      if (i.type === 'checkbox') i.checked = !!settings[i.dataset.k];
+      if (i.dataset.k === 'swingDirectionFlip') i.checked = settings.swingDirection === -1;
+      else if (i.type === 'checkbox') i.checked = !!settings[i.dataset.k];
       else i.value = String(settings[i.dataset.k]);
     });
     el.querySelectorAll('[data-g]').forEach((i) => {
@@ -83,7 +87,8 @@ export function createSettingsScreen(app) {
     const t = e.target;
     if (t.dataset.k) {
       const k = t.dataset.k;
-      settings[k] = t.type === 'checkbox' ? t.checked : k === 'sensorRateHz' ? Number(t.value) : t.value;
+      if (k === 'swingDirectionFlip') settings.swingDirection = t.checked ? -1 : 1;
+      else settings[k] = t.type === 'checkbox' ? t.checked : k === 'sensorRateHz' || k === 'addressSeconds' ? Number(t.value) : t.value;
     } else if (t.dataset.g) {
       const g = t.dataset.g;
       settings.game[g] = t.type === 'range' ? Number(t.value) : t.value;
@@ -119,6 +124,7 @@ export function createSafetyScreen(app) {
         <li><b>작고 느린 하프 스윙</b>으로 충분합니다. 이 게임은 전력 스윙을 요구하지 않으며, 세게 휘둘러도 거리가 늘지 않습니다 (파워 상한 적용).</li>
         <li>손목·팔꿈치·허리에 통증이 있으면 즉시 중단하세요.</li>
         <li>미끄러운 바닥, 좁은 실내, 천장이 낮은 곳에서는 사용하지 마세요.</li>
+        <li>스윙 순서: <b>어드레스</b>(휴대폰 끝을 비스듬히 아래로, 3초 정지) → <b>백스윙</b>(휴대폰 뒷면 쪽으로 들어 올림) → <b>탑</b>(잠깐 멈춤) → <b>다운스윙</b>(내려옴) → 임팩트. 화면 위쪽에 현재 인식된 단계가 표시됩니다.</li>
         <li>스윙 중에는 화면 터치가 잠깁니다. 잠금 해제는 오른쪽 위 버튼을 1초간 누르세요.</li>
         <li>센서 이상, 데이터 끊김, 충격(떨어뜨림 등)이 감지되면 공을 발사하지 않습니다.</li>
       </ul>

@@ -77,7 +77,7 @@ export function createRecorderScreen(app) {
 
   const detector = new SwingDetector({
     onState: (s) => {
-      if (autoEl.checked) stateEl.textContent = { waitStill: '자동: 어드레스 자세로 정지하세요', ready: '자동: 준비 완료, 스윙하세요', swinging: '자동: 스윙 기록 중…', cooldown: '자동: 저장 완료' }[s] ?? s;
+      if (autoEl.checked) stateEl.textContent = { waitStill: '자동: 어드레스 (3초 정지, 휴대폰 끝 아래로)', ready: '자동: 준비 완료, 백스윙하세요', backswing: '자동: 백스윙', top: '자동: 탑', downswing: '자동: 다운스윙', follow: '자동: 임팩트', cooldown: '자동: 저장 완료' }[s] ?? s;
     },
     onSwing: (r, windowSamples) => saveRecording(windowSamples, r),
   });

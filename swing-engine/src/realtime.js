@@ -1,72 +1,138 @@
-// Real-time swing detector for game mode.
+// Real-time swing detector: an explicit phase machine that follows the
+// player's swing step by step.
 //
-// States
-//   idle       not armed
-//   countdown  armed with a grace period so the player can grip the phone
-//   waitStill  armed, waiting for the player to hold still (address)
-//   ready      address detected; waiting for the swing to start
-//   swinging   motion in progress, buffering
-//   cooldown   result delivered; short pause before re-arming
+//   idle        not armed
+//   countdown   grace period after pressing the button (grip the phone)
+//   waitStill   ADDRESS: the phone must point obliquely down (its top 15-88°
+//               below horizontal) and stay still for `stillSeconds` (3 s)
+//   ready       address confirmed; waiting for the takeaway
+//   backswing   the phone turns toward its BACK (rotation about its width
+//               axis, x) - the takeaway has started
+//   top         the backswing rotation has slowed / paused at the top
+//   downswing   the rotation reversed (toward the screen side) and is
+//               coming down
+//   follow      impact passed (phone back at the address angle); waiting
+//               for the follow-through to settle
+//   cooldown    result delivered; short pause before re-arming
 //
-// Accidental shakes do not launch: a launch requires an address, a swing
-// and a passing offline analysis (see analyze.js validity rules).
+// Grip convention (phone held like a club grip): top of the phone toward the
+// ball, swing rotation about the phone's x axis; backswing = negative gx
+// (top moves toward the back of the phone). `direction: -1` flips this for
+// players who hold the phone the other way round.
+//
+// The phases decide WHEN a swing happened; the offline analysis
+// (analyze.js) of the recorded window then provides the features and the
+// final validity check (clipping, shocks, data gaps).
 
 import { analyzeSwing } from './analyze.js';
 
 const G = 9.80665;
+const DEG = 180 / Math.PI;
 
 export const DEFAULT_DETECTOR = Object.freeze({
-  stillSeconds: 0.4,
-  stillOmega: 0.5,
-  stillAccelDev: 1.5,
-  startOmega: 2.0,
-  endOmega: 1.0,
-  endQuietSeconds: 0.45,
-  minSwingSeconds: 0.4,
-  maxSwingSeconds: 4.0,
-  maxReadySeconds: 20,
-  preRollSeconds: 0.6,
-  bufferSeconds: 8,
+  direction: 1,
+  // Address
+  stillSeconds: 3.0,
+  stillOmega: 0.35, // rad/s
+  stillAccelDev: 1.2, // m/s^2
+  minPitchDownDeg: 15,
+  maxPitchDownDeg: 88,
+  // Backswing start: rotation toward the back, dominated by the x axis
+  backswingOmega: 0.8, // rad/s
+  backswingConfirmSeconds: 0.04,
+  axisDominance: 0.5, // |gx| >= 0.5 |omega|
+  // Top: rotation slows down after a real backswing
+  topOmega: 0.4,
+  minBackswingDeg: 30,
+  maxBackswingSeconds: 3.0,
+  maxTopSeconds: 2.0,
+  // Downswing: reversed rotation
+  downswingOmega: 1.0,
+  impactReturnFraction: 0.95, // impact when the phone is back at 95% of the backswing angle
+  minPeakOmega: 2.5, // rad/s, slower "downswings" are not shots
+  maxDownswingSeconds: 1.5,
+  // Follow-through
+  followQuietOmega: 1.0,
+  followQuietSeconds: 0.35,
+  maxFollowSeconds: 1.5,
+  // Bookkeeping
+  readyTimeoutSeconds: 25,
+  preRollSeconds: 0.5,
+  bufferSeconds: 12,
   cooldownSeconds: 1.2,
   autoRearm: true,
-  // Real-time impact estimate (sound cue)
-  liveReverseOmega: 1.0,
-  liveMinBackswingSeconds: 0.2,
-  liveMinBackswingRad: 0.6, // ~35 deg, same as the offline rule
-  liveMinPeakOmega: 3.0,
-  liveReturnFraction: 0.95,
+});
+
+/** Detector settings for putting strokes (small pendulum motion). */
+export const PUTT_PHASES = Object.freeze({
+  backswingOmega: 0.25,
+  topOmega: 0.12,
+  minBackswingDeg: 4,
+  downswingOmega: 0.25,
+  minPeakOmega: 0.35,
+  followQuietOmega: 0.3,
+  maxBackswingSeconds: 4,
+  maxDownswingSeconds: 2.5,
+  maxTopSeconds: 3,
+});
+
+export const HINTS = Object.freeze({
+  tilt: '휴대폰 끝을 비스듬히 아래(공 쪽)로 향하세요',
+  moving: '움직이지 말고 그대로 계세요',
+  wrongDirection: '백스윙은 휴대폰 뒷면 쪽으로 올리세요',
+  smallBackswing: '백스윙이 너무 작습니다 — 다시 어드레스하세요',
+  longTop: '탑에서 너무 오래 멈췄습니다 — 다시 어드레스하세요',
+  incomplete: '다운스윙이 끝까지 내려오지 않았습니다',
+  slow: '다운스윙이 너무 느립니다',
 });
 
 export class SwingDetector {
-  constructor({ config = {}, analysis = {}, onState = () => {}, onSwing = () => {}, onImpact = () => {} } = {}) {
+  constructor({ config = {}, analysis = {}, onState = () => {}, onSwing = () => {}, onImpact = () => {}, onHint = () => {} } = {}) {
     this.cfg = { ...DEFAULT_DETECTOR, ...config };
     this.analysis = analysis;
     this.onState = onState;
     this.onSwing = onSwing;
     this.onImpact = onImpact;
+    this.onHint = onHint;
     this.buf = [];
     this.state = 'idle';
     this.stateSince = 0;
-    this.stillSince = null;
-    this.readyAt = null;
-    this.swingStart = null;
-    this.quietSince = null;
     this.lastT = 0;
+    this.hint = null;
+    this.resetPhase();
+  }
+
+  resetPhase() {
+    this.stillSince = null;
+    this.addressStart = null;
+    this.bsStart = null;
+    this.bsAngle = 0;
+    this.dsAngle = 0;
+    this.peak = 0;
+    this.candidateSince = null;
+    this.quietSince = null;
+    this.impactT = null;
+    this.phaseTimes = {};
   }
 
   setState(s, t, info) {
     this.state = s;
     this.stateSince = t;
+    if (s in { backswing: 1, top: 1, downswing: 1, follow: 1 }) this.phaseTimes[s] = t;
     this.onState(s, info);
   }
 
-  /**
-   * @param {Object} [opts]
-   * @param {number} [opts.delaySeconds] grace period before the stillness check
-   *   starts (pressing the on-screen button moves the phone).
-   */
+  setHint(h) {
+    if (h !== this.hint) {
+      this.hint = h;
+      this.onHint(h);
+    }
+  }
+
+  /** @param {{delaySeconds?: number}} [opts] */
   arm({ delaySeconds = 0 } = {}) {
-    this.stillSince = null;
+    this.resetPhase();
+    this.setHint(null);
     if (delaySeconds > 0) {
       this.countdownSeconds = delaySeconds;
       this.countdownEnd = null;
@@ -76,20 +142,37 @@ export class SwingDetector {
     this.setState('waitStill', this.lastT);
   }
 
-  /** 0..1 progress of the stillness check while waiting for the address. */
+  disarm() {
+    this.resetPhase();
+    this.setState('idle', this.lastT);
+  }
+
+  /** 0..1 progress of the address hold. */
   get stillProgress() {
     if (this.state !== 'waitStill' || this.stillSince === null) return 0;
     return Math.min(1, (this.lastT - this.stillSince) / this.cfg.stillSeconds);
   }
 
-  /** Seconds left in the countdown (null when not counting down). */
   get countdownLeft() {
     if (this.state !== 'countdown') return null;
     return this.countdownEnd === null ? this.countdownSeconds : Math.max(0, this.countdownEnd - this.lastT);
   }
 
-  disarm() {
-    this.setState('idle', this.lastT);
+  /** Live backswing angle (deg) for the UI. */
+  get backswingDeg() {
+    return this.bsAngle * DEG;
+  }
+
+  /** Phone pitch: degrees the top of the phone points below the horizon. */
+  static pitchDownDeg(s) {
+    const a = Math.hypot(s.ax, s.ay, s.az) || 1;
+    return Math.asin(Math.max(-1, Math.min(1, -s.ay / a))) * DEG;
+  }
+
+  rejectAndReAddress(t, hint) {
+    this.setHint(hint);
+    this.resetPhase();
+    this.setState('waitStill', t);
   }
 
   push(s) {
@@ -98,13 +181,19 @@ export class SwingDetector {
       this.buf = [];
       if (this.state !== 'idle') this.arm();
     }
+    const dt = this.buf.length ? Math.min(0.05, s.t - this.buf[this.buf.length - 1].t) : 0;
     this.lastT = s.t;
     this.buf.push(s);
     const minT = s.t - this.cfg.bufferSeconds;
     while (this.buf.length && this.buf[0].t < minT) this.buf.shift();
+
+    const c = this.cfg;
     const w = Math.hypot(s.gx, s.gy, s.gz);
     const aDev = Math.abs(Math.hypot(s.ax, s.ay, s.az) - G);
-    const c = this.cfg;
+    // Rotation toward the back of the phone is positive "b".
+    const b = -c.direction * s.gx;
+    const dominant = Math.abs(s.gx) >= c.axisDominance * w;
+
     switch (this.state) {
       case 'countdown': {
         if (this.countdownEnd === null) this.countdownEnd = s.t + this.countdownSeconds;
@@ -112,41 +201,106 @@ export class SwingDetector {
         break;
       }
       case 'waitStill': {
-        if (w < c.stillOmega && aDev < c.stillAccelDev) {
+        const pitch = SwingDetector.pitchDownDeg(s);
+        const tilted = pitch >= c.minPitchDownDeg && pitch <= c.maxPitchDownDeg;
+        const still = w < c.stillOmega && aDev < c.stillAccelDev;
+        if (still && tilted) {
           if (this.stillSince === null) this.stillSince = s.t;
+          if (this.hint === HINTS.tilt || this.hint === HINTS.moving) this.setHint(null);
           if (s.t - this.stillSince >= c.stillSeconds) {
-            this.readyAt = this.stillSince;
+            this.addressStart = this.stillSince;
+            this.setHint(null);
             this.setState('ready', s.t);
           }
         } else {
+          if (this.stillSince !== null && s.t - this.stillSince > 0.3) this.setHint(tilted ? HINTS.moving : HINTS.tilt);
+          else if (!tilted && still) this.setHint(HINTS.tilt);
           this.stillSince = null;
         }
         break;
       }
       case 'ready': {
-        if (w > c.startOmega) {
-          this.swingStart = s.t;
-          this.quietSince = null;
-          this.live = { ref: [s.gx / w, s.gy / w, s.gz / w], top: null, peak: 0, fired: false, angle: 0, lastT: s.t };
-          this.setState('swinging', s.t);
-        } else if (w < c.stillOmega && aDev < c.stillAccelDev) {
-          // Keep the address window fresh while the player waits.
-          if (s.t - this.readyAt > 3) this.readyAt = s.t - 1.5;
-        } else if (s.t - this.stateSince > c.maxReadySeconds) {
-          this.arm();
+        if (b > c.backswingOmega && dominant) {
+          if (this.candidateSince === null) this.candidateSince = s.t;
+          if (s.t - this.candidateSince >= c.backswingConfirmSeconds) {
+            // Count the rotation from the moment the takeaway began.
+            this.bsStart = this.candidateSince;
+            this.bsAngle = 0;
+            for (let i = 1; i < this.buf.length; i++) {
+              const q = this.buf[i];
+              if (q.t < this.candidateSince - 0.1) continue;
+              this.bsAngle += Math.max(0, -c.direction * q.gx) * (q.t - this.buf[i - 1].t);
+            }
+            this.candidateSince = null;
+            this.setHint(null);
+            this.setState('backswing', s.t);
+          }
+        } else {
+          this.candidateSince = null;
+          if (-b > c.backswingOmega && dominant) {
+            // Moving toward the screen first: not a takeaway.
+            this.rejectAndReAddress(s.t, HINTS.wrongDirection);
+          } else if (w > c.stillOmega * 3 && !(b > 0 && dominant)) {
+            // Fidgeting: require a fresh address.
+            this.rejectAndReAddress(s.t, HINTS.moving);
+          } else if (s.t - this.stateSince > c.readyTimeoutSeconds) {
+            this.rejectAndReAddress(s.t, null);
+          }
         }
         break;
       }
-      case 'swinging': {
-        this.trackLiveImpact(s, w);
-        if (w < c.endOmega) {
+      case 'backswing': {
+        if (b > 0) this.bsAngle += b * dt;
+        const tooLong = s.t - this.bsStart > c.maxBackswingSeconds;
+        if (b < c.topOmega || tooLong) {
+          if (this.bsAngle * DEG >= c.minBackswingDeg && !tooLong) {
+            this.setState('top', s.t);
+          } else {
+            this.rejectAndReAddress(s.t, HINTS.smallBackswing);
+          }
+        }
+        break;
+      }
+      case 'top': {
+        if (b > 0) this.bsAngle += b * dt; // a little more turn while pausing
+        if (-b > c.downswingOmega) {
+          this.dsAngle = 0;
+          this.peak = 0;
+          this.setState('downswing', s.t);
+        } else if (b > c.backswingOmega) {
+          this.setState('backswing', s.t); // kept turning back
+        } else if (s.t - this.stateSince > c.maxTopSeconds) {
+          this.rejectAndReAddress(s.t, HINTS.longTop);
+        }
+        break;
+      }
+      case 'downswing': {
+        if (-b > 0) this.dsAngle += -b * dt;
+        this.peak = Math.max(this.peak, w);
+        if (this.dsAngle >= this.bsAngle * c.impactReturnFraction) {
+          if (this.peak >= c.minPeakOmega) {
+            this.impactT = s.t;
+            this.onImpact({ t: s.t, peakOmega: this.peak, backswingDeg: this.bsAngle * DEG });
+            this.quietSince = null;
+            this.setState('follow', s.t);
+          } else {
+            this.setHint(HINTS.slow);
+            this.finish(s.t);
+          }
+        } else if ((-b < c.topOmega && s.t - this.stateSince > 0.25) || s.t - this.stateSince > c.maxDownswingSeconds) {
+          this.setHint(HINTS.incomplete);
+          this.finish(s.t);
+        }
+        break;
+      }
+      case 'follow': {
+        if (w < c.followQuietOmega) {
           if (this.quietSince === null) this.quietSince = s.t;
         } else {
           this.quietSince = null;
         }
-        const elapsed = s.t - this.swingStart;
-        const settled = this.quietSince !== null && s.t - this.quietSince >= this.quietNeeded && elapsed >= c.minSwingSeconds;
-        if (settled || elapsed >= c.maxSwingSeconds) this.finish(s.t);
+        const settled = this.quietSince !== null && s.t - this.quietSince >= c.followQuietSeconds;
+        if (settled || s.t - this.stateSince >= c.maxFollowSeconds) this.finish(s.t);
         break;
       }
       case 'cooldown': {
@@ -161,56 +315,22 @@ export class SwingDetector {
     }
   }
 
-  /**
-   * Real-time impact estimate, used only for instant feedback (the impact
-   * sound). Same principle as the offline analysis, approximated in the phone
-   * frame: the rotation about the takeaway axis is integrated going back;
-   * after the rotation reverses (top), the impact is when the phone has turned
-   * back through the same angle, i.e. returned to the address orientation.
-   * In the body frame a rotation about a near-fixed axis keeps its direction,
-   * so projecting on the takeaway direction is a good approximation. The
-   * authoritative impact time comes from analyzeSwing afterwards.
-   */
-  trackLiveImpact(s, w) {
-    const L = this.live;
-    if (!L || L.fired) return;
-    const c = this.cfg;
-    const proj = s.gx * L.ref[0] + s.gy * L.ref[1] + s.gz * L.ref[2];
-    const dt = Math.max(0, Math.min(0.05, s.t - L.lastT));
-    L.lastT = s.t;
-    if (L.top === null) {
-      if (proj > 0) L.angle += proj * dt;
-      if (proj < -c.liveReverseOmega && s.t - this.swingStart >= c.liveMinBackswingSeconds) {
-        // A real backswing turns the phone a long way before reversing; a
-        // wrist shake does not.
-        if (L.angle >= c.liveMinBackswingRad) {
-          L.top = s.t;
-          L.down = 0;
-        } else {
-          L.fired = true; // not a swing: stay silent
-        }
-      }
-      return;
-    }
-    L.down += -proj * dt;
-    L.peak = Math.max(L.peak, w);
-    if (L.down >= L.angle * c.liveReturnFraction && L.peak >= c.liveMinPeakOmega) {
-      L.fired = true;
-      this.onImpact({ t: s.t, peakOmega: L.peak, sinceTop: s.t - L.top });
-    }
-  }
-
-  /** Waiting at the top of a slow swing must not end the recording. */
-  get quietNeeded() {
-    const L = this.live;
-    const atTop = L && !L.fired && L.angle >= this.cfg.liveMinBackswingRad;
-    return atTop ? Math.max(this.cfg.endQuietSeconds, 1.5) : this.cfg.endQuietSeconds;
-  }
-
   finish(t) {
-    const from = Math.min(this.readyAt ?? this.swingStart, this.swingStart - 1) - this.cfg.preRollSeconds;
+    const from = (this.addressStart ?? (this.bsStart ?? t) - 1) - this.cfg.preRollSeconds;
     const window = this.buf.filter((x) => x.t >= from);
-    const result = analyzeSwing(window, this.analysis);
+    let result = analyzeSwing(window, this.analysis);
+    if (this.impactT === null && result.valid) {
+      // The live phases did not see a complete downswing: do not launch.
+      result = { ...result, valid: false, reason: 'incomplete_swing' };
+    }
+    result.livePhases = {
+      addressStart: this.addressStart,
+      backswingStart: this.bsStart,
+      top: this.phaseTimes.top ?? null,
+      downswingStart: this.phaseTimes.downswing ?? null,
+      impact: this.impactT,
+      backswingDeg: this.bsAngle * DEG,
+    };
     this.setState('cooldown', t);
     this.onSwing(result, window);
   }
