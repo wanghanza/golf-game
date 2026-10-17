@@ -285,3 +285,16 @@ test('driver impact is just past the address angle (ascending), irons at the add
   const a4 = analyzeSwing(samples, { impactLeadDeg: 4 }).phases.impact;
   assert.ok(a4 > a0 && Math.abs(a0 - meta.truth.impact) < 0.015);
 });
+
+test('wrist features: cast lowers lag retention, roll/hold change forearm roll rate', () => {
+  const f = (type) => featureValues(analyzeSwing(generateSwing({ type, seed: 3 }).samples));
+  const normal = f('normal');
+  const cast = f('cast');
+  const roll = f('roll');
+  const hold = f('hold');
+  for (const x of [normal, cast, roll, hold]) assert.ok(x.lagRetention > 0.5 && x.lagRetention <= 1.0001);
+  assert.ok(cast.lagRetention < normal.lagRetention - 0.03);
+  assert.ok(cast.releaseTimingMs < normal.releaseTimingMs);
+  assert.ok(roll.forearmRollRate > normal.forearmRollRate + 1);
+  assert.ok(hold.forearmRollRate < normal.forearmRollRate - 1);
+});

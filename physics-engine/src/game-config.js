@@ -32,6 +32,22 @@ export const DEFAULT_GAME_CONFIG = Object.freeze({
   directionAssist: 0.3,
   // Strike quality penalty on ball speed when the swing quality score is low.
   maxStrikePenalty: 0.12,
+  // Wrist action (game model, not validated on real swings yet):
+  // lag retention = angular velocity at impact / peak. A well-held lag keeps
+  // ~0.96; an early release ("cast"/flip) drops it, costing club speed and
+  // adding dynamic loft and spin (higher, weaker flight).
+  wristModel: true,
+  lagIdeal: 0.96,
+  lagPoor: 0.8,
+  castSpeedLoss: 0.1, // fraction of club speed lost at lagPoor
+  castLoftDeg: 5, // extra dynamic loft at lagPoor
+  castSpinGain: 0.25, // extra spin fraction at lagPoor
+  // Forearm rotation through impact, normalised by the swing speed
+  // (roll rate / in-plane angular velocity). Faster than neutral closes the
+  // face (draw/hook); held off opens it (fade/push).
+  rollNeutral: 0.23,
+  rollFaceGainDeg: 12,
+  rollFaceClampDeg: 4,
 });
 
 export function resolveGameConfig(overrides = {}) {
