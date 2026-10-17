@@ -27,6 +27,7 @@ export const DEFAULT_ANALYSIS = Object.freeze({
   activeOmega: 1.2, // rad/s, motion threshold
   quietOmega: 0.5, // rad/s, "still" threshold
   quietAccelDev: 1.5, // m/s^2, allowed | |a| - g | while still
+  biasOmega: 0.12, // rad/s, gyro-bias window must stay below this
   minAddressSeconds: 0.2,
   mergeGapSeconds: 0.6, // the transition at the top can be slow
   minBackswingDeg: 35,
@@ -41,6 +42,7 @@ export const DEFAULT_ANALYSIS = Object.freeze({
   maxGapInSwing: 0.03, // s
   armRadius: 0.6, // m, assumed lead-shoulder-to-hands distance (model assumption)
   longAxis: [0, 1, 0], // phone axis that runs along the "shaft" when gripped
+  transitionWindow: 0.35, // first part of the downswing used for the transition features
 });
 
 /** A value together with where it came from. */
@@ -125,7 +127,11 @@ export function analyzeSwing(samples, options = {}) {
   let hasAddress = qEnd > 0 && (qEnd - qStart + 1) / fs >= cfg.minAddressSeconds;
   let refStart, refEnd;
   if (hasAddress) {
+    // A slow takeaway stays under quietOmega for a while; keep that start of
+    // the motion out of the gyro-bias window or it is subtracted from the
+    // whole swing.
     refEnd = qEnd;
+    while (refEnd > qStart + Math.round(cfg.minAddressSeconds * fs) && wmag[refEnd] > cfg.biasOmega) refEnd--;
     refStart = Math.max(qStart, qEnd - Math.round(0.5 * fs));
   } else {
     refEnd = Math.max(0, actStart - 1);
@@ -297,6 +303,37 @@ export function analyzeSwing(samples, options = {}) {
   const rollWin = Math.round(0.02 * fs);
   const forearmRollRate = -avgRoll(impactIdx - rollWin, impactIdx + rollWin);
 
+  // Transition and acceleration zone.
+  //  - transition drop: from the top, the hands should first fall (gravity
+  //    and arms) while the club angle is held, instead of the club being
+  //    thrown from the top. Measured over the first part of the downswing as
+  //    the mean downward linear acceleration (world frame, gravity removed)
+  //    and the share of the backswing angle already unwound.
+  //  - acceleration zone: when the club gains energy fastest (max of
+  //    omega * angular acceleration, i.e. rotational power), as a fraction
+  //    of the downswing (0 = top, 1 = impact).
+  const dsN = Math.max(1, impactIdx - topIdx);
+  const winEnd = topIdx + Math.max(1, Math.round(cfg.transitionWindow * dsN));
+  let dropSum = 0;
+  for (let i = topIdx; i < winEnd; i++) {
+    const aw = quat.rotate(qs[i], [F.ax[i], F.ay[i], F.az[i]]);
+    dropSum += G - aw[2];
+  }
+  const transitionDropAccel = dropSum / (winEnd - topIdx);
+  const transitionRotation = theta[topIdx] < 0 ? (theta[winEnd] - theta[topIdx]) / -theta[topIdx] : 0;
+  const alphaHalf = Math.max(1, Math.round(0.01 * fs));
+  let alphaPeak = -Infinity;
+  let alphaIdx = topIdx;
+  for (let i = topIdx + alphaHalf; i <= impactIdx - alphaHalf; i++) {
+    const a = (Math.max(0, wp[i]) * (wp[i + alphaHalf] - wp[i - alphaHalf])) / (2 * alphaHalf * dt);
+    if (a > alphaPeak) {
+      alphaPeak = a;
+      alphaIdx = i;
+    }
+  }
+  const accelPeakPhase = (F.t[alphaIdx] - F.t[topIdx]) / Math.max(1e-6, tImpact - F.t[topIdx]);
+  const accelPeakMs = (tImpact - F.t[alphaIdx]) * 1000;
+
   // Swing-plane shift between backswing and downswing (horizontal azimuth of
   // the plane normal). Experimental proxy for club path.
   const planeOf = (a, b) => {
@@ -363,6 +400,10 @@ export function analyzeSwing(samples, options = {}) {
     lagRetention: feat(lagRetention, 'ratio', 'derived', '임팩트 각속도 / 최대 각속도 (래그 유지율)'),
     releaseTimingMs: feat(releaseTimingMs, 'ms', 'derived', '최대 각속도 시점 - 임팩트 (음수 = 임팩트 전)'),
     forearmRollRate: feat(forearmRollRate, 'rad/s', 'derived', '임팩트 시 전완 회전 속도 (+ 페이스 닫힘)'),
+    transitionDropAccel: feat(transitionDropAccel, 'm/s^2', 'derived', '다운스윙 초반 아래 방향 가속도 평균 (수직 낙하)'),
+    transitionRotation: feat(transitionRotation, 'ratio', 'derived', '다운스윙 초반에 이미 풀린 백스윙 각 비율'),
+    accelPeakPhase: feat(accelPeakPhase, 'ratio', 'derived', '가속 구간 중심: 회전 에너지가 가장 빨리 늘어난 시점 (0 = 탑, 1 = 임팩트)'),
+    accelPeakMs: feat(accelPeakMs, 'ms', 'derived', '가속 구간 중심: 임팩트 몇 ms 전'),
     planeShiftDeg: feat(planeShiftDeg, 'deg', 'estimated', '백스윙 대비 다운스윙 평면 방위 변화 (경로 추정용, 미검증)'),
     qualityScore: feat(qualityScore, '0-1', 'estimated'),
   };

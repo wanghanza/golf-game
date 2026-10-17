@@ -298,3 +298,25 @@ test('wrist features: cast lowers lag retention, roll/hold change forearm roll r
   assert.ok(roll.forearmRollRate > normal.forearmRollRate + 1);
   assert.ok(hold.forearmRollRate < normal.forearmRollRate - 1);
 });
+
+test('transition and acceleration zone: drop, early/late acceleration, throw from the top', () => {
+  const f = (type, extra = {}) => featureValues(analyzeSwing(generateSwing({ type, seed: 2, ...extra }).samples));
+  const normal = f('normal');
+  const noDrop = f('normal', { dropDepth: 0 });
+  const early = f('early');
+  const late = f('late');
+  const cast = f('cast');
+  // Hands dropping at the start of the downswing show as downward acceleration.
+  assert.ok(normal.transitionDropAccel > noDrop.transitionDropAccel + 1);
+  // Acceleration zone order and placement.
+  assert.ok(normal.accelPeakPhase > 0.6 && normal.accelPeakPhase < 0.88, `normal ${normal.accelPeakPhase}`);
+  assert.ok(early.accelPeakPhase < 0.55, `early ${early.accelPeakPhase}`);
+  assert.ok(late.accelPeakPhase > 0.88, `late ${late.accelPeakPhase}`);
+  assert.ok(cast.accelPeakPhase < 0.4);
+  // Early slows before impact, late is still speeding up after it.
+  assert.ok(early.releaseTimingMs < -100 && early.lagRetention < 0.9);
+  assert.ok(late.releaseTimingMs > 30 && late.lagRetention < 0.95);
+  assert.ok(normal.lagRetention > 0.95);
+  // Throwing the club from the top unwinds more of the backswing early.
+  assert.ok(cast.transitionRotation > normal.transitionRotation + 0.05);
+});

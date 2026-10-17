@@ -64,6 +64,9 @@ export function deliveryToLaunch(delivery, clubKey, opts = {}) {
  * @param {number} [swing.planeShiftDeg]   deg, estimated swing-plane azimuth shift
  * @param {number} [swing.qualityScore]    0..1, estimated
  * @param {number} [swing.lagRetention]    omega at impact / peak omega (derived)
+ * @param {number} [swing.accelPeakPhase]  acceleration zone, 0 = top .. 1 = impact (derived)
+ * @param {number} [swing.transitionRotation]  share of the backswing angle unwound early in the downswing (derived)
+ * @param {number} [swing.transitionDropAccel] mean downward hand acceleration early in the downswing, m/s^2 (derived)
  */
 export function swingToDelivery(swing, clubKey, configOverrides = {}) {
   const cfg = resolveGameConfig(configOverrides);
@@ -72,30 +75,52 @@ export function swingToDelivery(swing, clubKey, configOverrides = {}) {
   const powerRaw = Math.max(0, swing.peakOmega) / cfg.referenceOmega;
   const power = clamp(Math.pow(powerRaw, cfg.powerExponent), 0, cfg.maxPowerRatio);
   // Wrist action: clubhead speed follows the club's angular velocity at
-  // impact, so an early release (omega already falling at impact) loses
-  // speed in proportion, and the club arrives with less shaft lean (more
-  // dynamic loft).
-  let release = 1; // 1 = lag held, 0 = full early release
+  // impact, so releasing too early (omega already falling) or too late
+  // (omega still rising) both lose speed in proportion.
   let lagSpeed = 1;
   if (cfg.wristModel && Number.isFinite(swing.lagRetention)) {
-    release = clamp((swing.lagRetention - cfg.lagPoor) / (cfg.lagIdeal - cfg.lagPoor), 0, 1);
     lagSpeed = clamp(swing.lagRetention / cfg.lagIdeal, cfg.minLagSpeed, 1);
   }
-  const cast = 1 - release;
+  // Acceleration zone: where in the downswing the club gains speed fastest.
+  // Too early = casting (club passes the hands: more dynamic loft, slightly
+  // closed); too late = the club has not caught up (shaft leaning forward,
+  // face still open).
+  let early = 0;
+  let late = 0;
+  if (cfg.wristModel && Number.isFinite(swing.accelPeakPhase)) {
+    early = clamp((cfg.accelZone[0] - swing.accelPeakPhase) / cfg.accelEarlySpan, 0, 1);
+    late = clamp((swing.accelPeakPhase - cfg.accelZone[1]) / cfg.accelLateSpan, 0, 1);
+  } else if (cfg.wristModel && Number.isFinite(swing.lagRetention)) {
+    early = 1 - clamp((swing.lagRetention - cfg.lagPoor) / (cfg.lagIdeal - cfg.lagPoor), 0, 1);
+  }
+  // Transition from the top: the club should drop (hands fall, club angle
+  // held). Unwinding the club right away ("throwing from the top") steepens
+  // the downswing: out-to-in path and a steeper attack.
+  let steep = 0;
+  if (cfg.wristModel && Number.isFinite(swing.transitionRotation)) {
+    const [rGood, rBad] = cfg.transitionRotation;
+    const rotOk = clamp((rBad - swing.transitionRotation) / (rBad - rGood), 0, 1);
+    const [dBad, dGood] = cfg.transitionDrop;
+    const dropOk = Number.isFinite(swing.transitionDropAccel) ? clamp((swing.transitionDropAccel - dBad) / (dGood - dBad), 0, 1) : 1;
+    steep = 1 - rotOk * (0.6 + 0.4 * dropOk);
+  }
   const clubSpeed = club.refClubSpeed * level.speedScale * power * lagSpeed;
   const assist = 1 - clamp(cfg.directionAssist, 0, 1);
-  const faceAngle = clamp((swing.faceRollDeg ?? 0) * cfg.faceGain, -cfg.faceClampDeg, cfg.faceClampDeg) * assist;
-  const clubPath = clamp((swing.planeShiftDeg ?? 0) * cfg.pathGain, -cfg.pathClampDeg, cfg.pathClampDeg) * assist;
+  const faceRaw = clamp((swing.faceRollDeg ?? 0) * cfg.faceGain, -cfg.faceClampDeg, cfg.faceClampDeg);
+  const faceAngle = (faceRaw - cfg.earlyFaceCloseDeg * early + cfg.lateFaceOpenDeg * late) * assist;
+  const pathRaw = clamp((swing.planeShiftDeg ?? 0) * cfg.pathGain, -cfg.pathClampDeg, cfg.pathClampDeg);
+  const clubPath = (pathRaw - cfg.steepPathDeg * steep) * assist;
+  const attackBase = club.gameAttack ?? club.refAttack;
   return {
     power,
     clubSpeed,
     faceAngle,
     clubPath,
     // Game attack angle: the driver is struck slightly on the way up.
-    attackAngle: club.gameAttack ?? club.refAttack,
+    attackAngle: attackBase - cfg.steepAttackDeg * steep,
     strikeQuality: clamp(swing.qualityScore ?? 1, 0, 1),
-    dynamicLoftExtra: cfg.castLoftDeg * cast,
-    wrist: { release, lagSpeed },
+    dynamicLoftExtra: cfg.castLoftDeg * early - cfg.lateDeloftDeg * late,
+    wrist: { lagSpeed, early, late, steep },
   };
 }
 

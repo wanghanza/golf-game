@@ -79,7 +79,7 @@ export function createGameScreen(app) {
     const side = flight.totalLateral;
     result.innerHTML = `
       <div class="shape">${esc(shot.shape.label)}</div>
-      ${D.wrist ? `<div class="muted">손목: ${esc(wristText(D.wrist, D.faceAngle))} (게임 모델 추정)</div>` : ''}
+      ${D.wrist ? `<div class="muted">${esc(wristText(D.wrist, D.faceAngle))} (게임 모델 추정)</div>` : ''}
       <div class="big">
         <div>캐리<b>${fmtDist(flight.carry)}</b></div>
         <div>총거리<b>${fmtDist(flight.total)}</b></div>
@@ -94,6 +94,8 @@ export function createGameScreen(app) {
         <span class="k">가상 클럽 스피드</span><span class="v">${fmt(D.clubSpeed)} m/s</span>${tag('estimated')}
         <span class="k">페이스 / 경로</span><span class="v">${fmt(D.faceAngle)}° / ${fmt(D.clubPath)}°</span>${tag('estimated')}
         <span class="k">휴대폰 최대 각속도</span><span class="v">${fmt(f.peakOmegaInPlane)} rad/s</span>${tag('derived')}
+        <span class="k">탑 전환: 초반 회전 / 낙하</span><span class="v">${fmt((f.transitionRotation ?? 0) * 100, 0)}% / ${fmt(f.transitionDropAccel)} m/s²</span>${tag('derived')}
+        <span class="k">가속 구간 중심</span><span class="v">다운스윙 ${fmt((f.accelPeakPhase ?? 0) * 100, 0)}% (임팩트 ${fmt(f.accelPeakMs, 0)} ms 전)</span>${tag('derived')}
         <span class="k">래그 유지율</span><span class="v">${fmt((f.lagRetention ?? 0) * 100, 0)}%</span>${tag('derived')}
         <span class="k">릴리스 시점</span><span class="v">임팩트 ${fmt(Math.abs(f.releaseTimingMs ?? 0), 0)} ms ${(f.releaseTimingMs ?? 0) <= 0 ? '전' : '후'}</span>${tag('derived')}
         <span class="k">전완 회전 속도 (참고)</span><span class="v">${fmt(f.forearmRollRate)} rad/s</span>${tag('derived')}
@@ -125,7 +127,7 @@ export function createGameScreen(app) {
   let sampleSeed = 1;
   function sampleSwing() {
     unlockAudio();
-    const types = ['normal', 'draw', 'fade', 'cast', 'half', 'fast'];
+    const types = ['normal', 'draw', 'fade', 'cast', 'early', 'late', 'half', 'fast'];
     const type = types[(sampleSeed - 1) % types.length];
     const { samples, meta } = generateSwing({ type, seed: sampleSeed++ });
     handleResult(analyzeSwing(samples), `합성 데이터 · ${meta.swingTypeLabel}`);

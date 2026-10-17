@@ -10,19 +10,37 @@ const fly = (extra) => {
   return { shot, flight: simulateShot(shot.launch) };
 };
 
-test('held lag vs early release (cast): cast is slower, higher, spinnier, shorter', () => {
+test('lag: club speed follows omega at impact', () => {
   const held = fly({ lagRetention: 0.96 });
-  const cast = fly({ lagRetention: 0.85 });
-  assert.equal(held.shot.delivery.wrist.release, 1);
-  assert.ok(cast.shot.delivery.wrist.release < 0.5);
-  // Clubhead speed follows omega at impact: 0.85 / 0.96 of the held-lag speed.
-  assert.ok(Math.abs(cast.shot.delivery.clubSpeed / held.shot.delivery.clubSpeed - 0.85 / 0.96) < 1e-9);
-  assert.ok(cast.shot.launch.ballSpeed < held.shot.launch.ballSpeed);
-  assert.ok(cast.shot.launch.launchAngle > held.shot.launch.launchAngle);
-  // Less speed but more spin loft: spin per unit club speed goes up.
-  const spinPerSpeed = (s) => s.launch.spinRate / s.delivery.clubSpeed;
-  assert.ok(spinPerSpeed(cast.shot) > spinPerSpeed(held.shot) * 1.1);
-  assert.ok(cast.flight.carry < held.flight.carry - 10);
+  const lost = fly({ lagRetention: 0.85 });
+  assert.ok(Math.abs(lost.shot.delivery.clubSpeed / held.shot.delivery.clubSpeed - 0.85 / 0.96) < 1e-9);
+  assert.ok(lost.flight.carry < held.flight.carry - 10);
+});
+
+test('acceleration zone: early adds loft and spin, late delofts and leaves the face open', () => {
+  const good = fly({ accelPeakPhase: 0.75 });
+  const early = fly({ accelPeakPhase: 0.3 });
+  const late = fly({ accelPeakPhase: 0.98 });
+  assert.equal(good.shot.delivery.wrist.early + good.shot.delivery.wrist.late, 0);
+  assert.equal(early.shot.delivery.wrist.early, 1);
+  assert.ok(late.shot.delivery.wrist.late > 0.99);
+  assert.ok(early.shot.launch.launchAngle > good.shot.launch.launchAngle + 2);
+  assert.ok(early.shot.launch.spinRate > good.shot.launch.spinRate);
+  assert.ok(early.shot.delivery.faceAngle < good.shot.delivery.faceAngle);
+  assert.ok(late.shot.launch.launchAngle < good.shot.launch.launchAngle - 1);
+  assert.ok(late.shot.delivery.faceAngle > good.shot.delivery.faceAngle + 1);
+  assert.ok(late.flight.totalLateral > good.flight.totalLateral + 3);
+});
+
+test('transition: throwing from the top steepens the downswing, a natural drop does not', () => {
+  const drop = swingToShot({ ...base, transitionRotation: 0.08, transitionDropAccel: 2 }, 'iron7');
+  const thrown = swingToShot({ ...base, transitionRotation: 0.3, transitionDropAccel: 2 }, 'iron7');
+  const noDrop = swingToShot({ ...base, transitionRotation: 0.08, transitionDropAccel: -1 }, 'iron7');
+  assert.equal(drop.delivery.wrist.steep, 0);
+  assert.equal(thrown.delivery.wrist.steep, 1);
+  assert.ok(Math.abs(noDrop.delivery.wrist.steep - 0.4) < 1e-9);
+  assert.ok(thrown.delivery.clubPath < drop.delivery.clubPath - 1);
+  assert.ok(thrown.delivery.attackAngle < drop.delivery.attackAngle - 1);
 });
 
 test('extra dynamic loft follows impact geometry (spin ~ sin, speed ~ cos of spin loft)', () => {
@@ -40,6 +58,6 @@ test('face direction comes from the face roll angle, wrist inputs absent or mode
   const open = swingToShot({ ...base, faceRollDeg: 6 }, 'iron7');
   assert.ok(closed.delivery.faceAngle < 0 && open.delivery.faceAngle > 0);
   const a = swingToShot(base, 'iron7');
-  const b = swingToShot({ ...base, lagRetention: 0.8 }, 'iron7', { wristModel: false });
+  const b = swingToShot({ ...base, lagRetention: 0.8, accelPeakPhase: 0.2, transitionRotation: 0.4 }, 'iron7', { wristModel: false });
   assert.deepEqual(a.launch, b.launch);
 });
