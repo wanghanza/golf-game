@@ -219,7 +219,7 @@ label { color: var(--muted); font-size: 13px; }
 .diag-tip { margin-top: 5px; color: #cfe8ff; line-height: 1.35; }
 .diag-history { list-style: none; margin: 6px 0 0; padding: 0; color: var(--muted); display: grid; gap: 1px; }
 .diag-history li.bad { color: #e9a79d; }
-@media (max-height: 500px) { .diag { top: calc(max(8px, env(safe-area-inset-top)) + 150px); max-height: calc(100% - 210px); } }
+@media (max-height: 500px) { .diag { top: calc(max(8px, env(safe-area-inset-top)) + 160px); max-height: calc(100% - 222px); } }
 
 .diag-cmp { margin-top: 6px; }
 .diag-cmp:empty { display: none; }
@@ -228,3 +228,50 @@ label { color: var(--muted); font-size: 13px; }
 .diag-cmp-sum small { color: var(--muted); }
 .diag-cal { pointer-events: auto; margin-top: 6px; padding: 5px 8px; font-size: 12px; width: 100%; }
 .diag-body { pointer-events: auto; }
+
+/* ---- Course HUD (screen-golf style) ---- */
+.hole-card { padding: 6px 10px 7px; min-width: 210px; }
+.hole-card .hc-top { display: flex; align-items: center; gap: 8px; }
+.hole-card .hc-no { font-size: 26px; font-weight: 800; line-height: 1; background: #2e7d4f; border-radius: 6px; padding: 3px 8px; }
+.hole-card .hc-top small { display: block; color: #ffcf7a; font-size: 12px; }
+.hole-card .hc-player { display: flex; justify-content: space-between; align-items: center; margin: 5px 0 2px; padding: 3px 8px;
+  border-radius: 6px; background: linear-gradient(90deg, rgba(255,255,255,0.14), rgba(255,255,255,0.04)); }
+.hole-card .hc-name { font-weight: 700; letter-spacing: 0.5px; }
+.hole-card .hc-score { font-weight: 800; font-size: 16px; padding: 0 8px; border-radius: 4px; background: #546e7a; }
+.hole-card .hc-score.over { background: #c62828; }
+.hole-card .hc-score.under { background: #1565c0; }
+.chud { position: absolute; inset: 0; pointer-events: none; z-index: 4; }
+.chud.hide { display: none; }
+.chud-map { position: absolute; right: 12px; top: calc(max(8px, env(safe-area-inset-top)) + 52px); width: 168px;
+  background: rgba(245, 248, 240, 0.92); border-radius: 10px; padding: 5px; box-shadow: 0 4px 16px rgba(0,0,0,0.35); color: #1d2a22; }
+.chud-map canvas { display: block; width: 100%; height: auto; border-radius: 6px; }
+.chud-head { display: flex; justify-content: space-between; align-items: center; font-size: 12px; font-weight: 700; padding: 0 2px 4px; }
+.chud-wind { display: inline-flex; align-items: center; gap: 4px; color: #0d47a1; }
+.chud-wind i { display: inline-block; font-style: normal; color: #1976d2; font-size: 14px; transition: transform 0.3s; }
+.chud-green, .chud-hole, .chud-prof { position: relative; margin-bottom: 4px; }
+.chud-green span, .chud-prof span { position: absolute; left: 4px; bottom: 3px; font-size: 10px; font-weight: 700; color: #fff; text-shadow: 0 1px 2px #000; }
+.chud-prof { margin-bottom: 0; background: #e8efe4; border-radius: 6px; }
+.chud-prof span { color: #1d2a22; text-shadow: none; }
+.chud-carry { display: none; font-size: 12px; font-weight: 700; color: #e65100; padding: 0 2px 4px; }
+.chud-carry.show { display: block; }
+.chud-flag { position: absolute; left: 0; top: 0; display: none; margin: -46px 0 0 8px; padding: 3px 8px; border-radius: 6px;
+  background: rgba(10, 20, 15, 0.72); font-size: 12px; line-height: 1.35; white-space: nowrap; }
+.chud-flag.show { display: block; }
+.chud-flag b { display: block; color: #fff; }
+.chud-flag span.up { color: #ff8a80; }
+.chud-flag span.down { color: #80d8ff; }
+.chud-lie { position: absolute; right: 196px; bottom: max(14px, env(safe-area-inset-bottom)); display: flex; align-items: center; gap: 7px;
+  background: rgba(10, 20, 15, 0.6); border-radius: 999px; padding: 4px 12px 4px 4px; }
+.chud-lie i { width: 26px; height: 26px; border-radius: 50%; border: 3px solid #fff; background: #4caf50; }
+.chud-lie.rough i { background: #2e6b2e; }
+.chud-lie.bunker i { background: #e6d29a; }
+.chud-lie.green i { background: #7ee07a; }
+.chud-lie.tee i { background: #66bb6a; box-shadow: inset 0 0 0 4px #c62828; }
+.chud-lie.forest i { background: #3e4d2e; }
+.chud-lie b { display: block; font-size: 15px; font-style: italic; }
+.chud-lie small { display: block; font-size: 10px; color: var(--muted); }
+@media (max-height: 500px) {
+  .chud-map { width: 138px; padding: 4px; }
+  .chud-head { font-size: 11px; padding-bottom: 2px; }
+  .hole-card { min-width: 190px; }
+}

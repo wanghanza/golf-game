@@ -14,6 +14,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   swingDirection: 1,
   addressSeconds: 3,
   diagPanel: true,
+  graphics: 'high',
   course: 'autumn',
   game: { ...DEFAULT_GAME_CONFIG },
 });

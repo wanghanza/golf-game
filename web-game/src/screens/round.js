@@ -14,6 +14,7 @@ import { cues, unlockAudio } from '../cues.js';
 import { swingFromFeatures, explainRealShot } from '../shot.js';
 import { createSwingInput, STATE_TEXT } from '../ui/swing-input.js';
 import { CourseScene } from '../course/scene.js';
+import { createCourseHud } from '../course/hud.js';
 
 // Putting: in-plane angular velocity (rad/s) that rolls the ball PUTT_MAX_DISTANCE.
 const PUTT_FULL_OMEGA = 5;
@@ -59,6 +60,7 @@ export function createRoundScreen(app) {
   let course = null;
   let scene = null;
   let round = null;
+  const hud = createCourseHud(el);
   let club = 'driver';
   let aim = 0;
   let busy = false;
@@ -94,27 +96,33 @@ export function createRoundScreen(app) {
     return round.distanceToPin + (pinY - round.ball.y);
   }
 
-  function windText() {
-    const w = round.wind();
-    const speed = Math.hypot(w[0], w[2]);
-    // Relative to the aim: head/tail and cross components.
-    const hd = (aim * Math.PI) / 180;
-    const along = w[0] * Math.sin(hd) + w[2] * Math.cos(hd);
-    const cross = w[0] * Math.cos(hd) - w[2] * Math.sin(hd);
-    const ht = along >= 0 ? '뒷바람' : '맞바람';
-    const lr = Math.abs(cross) < 0.3 ? '' : cross > 0 ? ' · 오른쪽으로' : ' · 왼쪽으로';
-    return `${ht} ${speed.toFixed(1)} m/s${lr}`;
-  }
-
   function renderHud() {
     const hole = round.hole;
     const totals = round.totals();
     const toPar = totals.toPar === 0 ? 'E' : totals.toPar > 0 ? `+${totals.toPar}` : String(totals.toPar);
     holeCard.innerHTML = `
-      <div class="hc-title"><b>${hole.number}번 홀</b> 파${hole.par} · ${fmtDist(hole.yardage)} <span>${esc(hole.name)}</span></div>
-      <div class="hc-row">핀까지 <b>${fmtDist(round.distanceToPin)}</b> <small>(체감 ${fmtDist(playsLike())})</small></div>
-      <div class="hc-row">${round.strokes}타 · 라이: ${esc(round.lie.label ?? round.lie.name)} · ${windText()}</div>
-      <div class="hc-row small">전체 ${totals.strokes}타 (${toPar})</div>`;
+      <div class="hc-top"><span class="hc-no">${hole.number}</span><div><b>Par ${hole.par}</b> · ${fmtDist(hole.yardage)}<small>${esc(hole.name)}</small></div></div>
+      <div class="hc-player"><span class="hc-name">PLAYER</span><span class="hc-score ${totals.toPar > 0 ? 'over' : totals.toPar < 0 ? 'under' : ''}">${toPar}</span></div>
+      <div class="hc-row">핀까지 <b>${fmtDist(round.distanceToPin)}</b> <small>체감 ${fmtDist(playsLike())}</small> · ${round.strokes + 1}번째 샷</div>
+      `;
+    const hz = hud.update({ hole, ball: round.ball, pin: round.pin, aim, aimDistance: aimDistance(), club, wind: round.wind(), lie: round.lie });
+    scene.setHazardLine(hz, round.ball);
+  }
+
+  // Floating distance/height label over the flag while aiming.
+  function onFrame() {
+    if (!round || scene.mode !== 'aim' || busy) {
+      hud.flagLabel(null);
+      return;
+    }
+    const pin = round.pin;
+    const py = course.heightAt(pin.x, pin.z);
+    const pos = scene.project(pin.x, py + 2.6, pin.z);
+    if (!pos || pos.x < 0 || pos.x > pos.w || pos.y < 0 || pos.y > pos.h) {
+      hud.flagLabel(null);
+      return;
+    }
+    hud.flagLabel(pos, round.distanceToPin, py - round.ball.y);
   }
 
   function aimDistance() {
@@ -150,6 +158,7 @@ export function createRoundScreen(app) {
   }
 
   function startHole() {
+    hud.setHole(round.hole);
     modal.classList.remove('show');
     showToast(`<b>${round.hole.number}번 홀 · 파${round.hole.par}</b><br>${esc(round.hole.name)} · ${fmtDist(round.hole.yardage)}`, 3500);
     prepareShot({ flyover: true });
@@ -177,6 +186,7 @@ export function createRoundScreen(app) {
 
   function execute(play, title) {
     busy = true;
+    scene.setHazardLine(null);
     const entry = play();
     setStatus(title, '');
     scene.playShot(entry.result, () => afterShot(entry));
@@ -311,7 +321,7 @@ export function createRoundScreen(app) {
 
   let courseId = null;
   async function ensureWorld(id) {
-    if (scene && courseId === id) return;
+    if (scene && courseId === id && scene.quality === settings.graphics) return;
     if (scene) {
       scene.dispose();
       scene = null;
@@ -322,13 +332,16 @@ export function createRoundScreen(app) {
     $(el, '[data-el=load-title]').textContent = def.name;
     loading.classList.add('show');
     course = createCourse(def);
+    hud.setCourse(course);
     scene = new CourseScene($(el, '#round-canvas-host'), course, {
+      quality: settings.graphics || 'high',
       onProgress: (p, text) => {
         $(el, '[data-el=load-bar]').style.width = `${Math.round(p * 100)}%`;
         $(el, '[data-el=load-text]').textContent = `${text}…`;
       },
     });
     await scene.build();
+    scene.onFrame = onFrame;
     round = new Round(course, { gameConfig: settings.game });
     loading.classList.remove('show');
     scene.start();
@@ -362,7 +375,7 @@ export function createRoundScreen(app) {
           sensorPill.className = 'pill';
         }
       }, 500);
-      if (scene && courseId === id) scene.start();
+      if (scene && courseId === id && scene.quality === settings.graphics) scene.start();
       await ensureWorld(id);
     },
     leave() {

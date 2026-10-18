@@ -43,6 +43,8 @@ export function createSettingsScreen(app) {
         <label>어드레스 정지 시간 (초)</label>
         <select data-k="addressSeconds"><option value="2">2초</option><option value="3">3초 (기본)</option><option value="4">4초</option><option value="5">5초</option></select>
         <label><input type="checkbox" data-k="swingDirectionFlip" /> 스윙 방향 반전 (화면을 목표 반대쪽으로 쥐는 경우)</label>
+        <label>그래픽 품질 (코스 라운드)</label>
+        <select data-k="graphics"><option value="high">높음 (잔디 질감, 선명)</option><option value="medium">보통</option><option value="low">낮음 (끊길 때)</option></select>
         <label>센서 요청 속도</label>
         <select data-k="sensorRateHz"><option value="100">100 Hz</option><option value="200">200 Hz</option></select>
       </div>
