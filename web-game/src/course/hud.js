@@ -322,7 +322,7 @@ export function createCourseHud(root) {
       greenImg = null;
     },
     setHole(hole) {
-      $(el, '[data-el=maptitle]').textContent = `${hole.number}H · Par ${hole.par}`;
+      $(el, '[data-el=maptitle]').textContent = `${hole.number}H P${hole.par}`;
       buildHoleMap(hole);
     },
     /**
@@ -346,7 +346,7 @@ export function createCourseHud(root) {
       $(el, '[data-el=lie2]').textContent = ko;
       lieEl.className = `chud-lie ${lie}`;
       const hz = hazardCarry(st);
-      carryEl.innerHTML = hz ? `해저드 캐리 <b>${esc(fmtDist(hz.to))}</b>` : '';
+      carryEl.innerHTML = hz ? `해저드 캐리 <b>${esc(fmtDist(Math.round(hz.to)))}</b>` : '';
       carryEl.classList.toggle('show', !!hz);
       return hz;
     },
