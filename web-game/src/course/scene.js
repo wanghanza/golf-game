@@ -5,7 +5,7 @@
 // World (course-engine): x east, y up, z north. three.js: (x, y, -z).
 
 import * as THREE from 'three';
-import { fbm } from '../../../course-engine/src/noise.js';
+import { fbm, smoothstep } from '../../../course-engine/src/noise.js';
 import { pointAlong, dirAt } from '../../../course-engine/src/terrain.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, -z);
@@ -65,6 +65,43 @@ const AUTUMN = {
   pine: [0.16, 0.3, 0.18],
 };
 
+// Fine grass detail (grey, multiplied with the surface colour): speckle,
+// short blades and soft clumps, tiled over the ground in world units.
+function grassTexture() {
+  const tex = canvasTexture(256, 256, (ctx, w, hgt) => {
+    ctx.fillStyle = 'rgb(222,222,222)';
+    ctx.fillRect(0, 0, w, hgt);
+    const r = rng(77);
+    for (let i = 0; i < 90; i++) {
+      // Soft clumps.
+      const x = r() * w;
+      const y = r() * hgt;
+      const rad = 10 + r() * 26;
+      const g = ctx.createRadialGradient(x, y, 0, x, y, rad);
+      const v = r() < 0.5 ? 255 : 190;
+      g.addColorStop(0, `rgba(${v},${v},${v},0.35)`);
+      g.addColorStop(1, `rgba(${v},${v},${v},0)`);
+      ctx.fillStyle = g;
+      for (const ox of [-w, 0, w]) for (const oy of [-hgt, 0, hgt]) { ctx.save(); ctx.translate(ox, oy); ctx.fillRect(x - rad, y - rad, 2 * rad, 2 * rad); ctx.restore(); }
+    }
+    for (let i = 0; i < 5200; i++) {
+      // Blades.
+      const x = r() * w;
+      const y = r() * hgt;
+      const v = Math.round(150 + r() * 105);
+      ctx.strokeStyle = `rgba(${v},${v},${v},0.55)`;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + (r() - 0.5) * 3, y - 2 - r() * 4);
+      ctx.stroke();
+    }
+  });
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.anisotropy = 4;
+  return tex;
+}
+
 // Per-course look. Colours are linear RGB triplets.
 const THEMES = {
   autumn: {
@@ -73,12 +110,16 @@ const THEMES = {
     leaves: true,
     pineShare: 0,
     floor: (n) => [0.55 + 0.12 * n, 0.3 + 0.08 * n, 0.12 + 0.04 * n], // leaf litter
-    rough: (n) => [0.52 + 0.05 * n, 0.55 + 0.05 * n, 0.24],
+    rough: (n) => [0.4 + 0.05 * n, 0.48 + 0.05 * n, 0.18],
     low: [0.83, 0.76, 0.58], // beach
     rock: [0.47, 0.43, 0.38],
     fairway: [[0.34, 0.58, 0.19], [0.28, 0.5, 0.16]],
     patchRough: [0.47, 0.47, 0.17],
     patchFloor: (nz) => [0.56 + nz * 3, 0.31 + nz, 0.12],
+    green: [[0.2, 0.55, 0.16], [0.17, 0.49, 0.14]],
+    fringe: [0.26, 0.56, 0.17],
+    tee: [0.3, 0.58, 0.2],
+    sand: [0.9, 0.84, 0.66],
     pine: [0.16, 0.3, 0.18],
     roof: 0x7a3b26,
     signBg: 'rgba(122,59,38,0.85)',
@@ -89,13 +130,17 @@ const THEMES = {
     steps: { terrain: '해안 절벽', trees: '해송 숲', leaves: '바닷바람' },
     leaves: false,
     pineShare: 1,
-    floor: (n) => [0.36 + 0.06 * n, 0.4 + 0.06 * n, 0.2], // pine needles and grass
-    rough: (n) => [0.66 + 0.05 * n, 0.57 + 0.05 * n, 0.32], // golden zoysia rough
+    floor: (n) => [0.25 + 0.05 * n, 0.3 + 0.05 * n, 0.14], // pine needles and grass
+    rough: (n) => [0.3 + 0.05 * n, 0.42 + 0.05 * n, 0.15], // zoysia rough, a little golden
     low: [0.42, 0.4, 0.37], // wave-cut rock
     rock: [0.44, 0.4, 0.36],
-    fairway: [[0.42, 0.6, 0.2], [0.36, 0.53, 0.17]], // zoysia (금잔디) fairway
+    fairway: [[0.34, 0.62, 0.17], [0.27, 0.53, 0.14]], // zoysia (금잔디) fairway
     patchRough: [0.64, 0.56, 0.3],
     patchFloor: (nz) => [0.36 + nz * 2, 0.4 + nz * 2, 0.2],
+    green: [[0.24, 0.58, 0.17], [0.2, 0.52, 0.15]],
+    fringe: [0.33, 0.56, 0.18],
+    tee: [0.36, 0.6, 0.2],
+    sand: [0.86, 0.8, 0.62],
     pine: [0.1, 0.22, 0.14], // black pine (해송)
     roof: 0x2f4a5c,
     signBg: 'rgba(30,60,80,0.85)',
@@ -104,12 +149,14 @@ const THEMES = {
 };
 
 export class CourseScene {
-  constructor(host, course, { onProgress } = {}) {
+  constructor(host, course, { onProgress, quality = 'high' } = {}) {
     this.host = host;
     this.course = course;
+    this.quality = quality;
     this.theme = THEMES[course.theme] ?? THEMES.autumn;
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
+    this.renderer = new THREE.WebGLRenderer({ antialias: quality !== 'low', powerPreference: 'high-performance' });
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, { high: 1.75, medium: 1.3, low: 1 }[quality] ?? 1.75));
+    this.turfTex = quality === 'low' ? null : grassTexture();
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 0.92;
@@ -230,6 +277,7 @@ export class CourseScene {
     const nz = Math.round((maxZ - minZ) / step);
     const pos = new Float32Array((nx + 1) * (nz + 1) * 3);
     const col = new Float32Array((nx + 1) * (nz + 1) * 3);
+    const uvs = new Float32Array((nx + 1) * (nz + 1) * 2);
     const idx = [];
     let k = 0;
     const tmp = new THREE.Color();
@@ -244,17 +292,9 @@ export class CourseScene {
         pos[k * 3] = x;
         pos[k * 3 + 1] = y;
         pos[k * 3 + 2] = -z;
-        const n = fbm(x / 40, z / 40, { octaves: 3, seed: 99 });
-        const T = this.theme;
-        if (y < 3) {
-          tmp.setRGB(...T.low);
-        } else {
-          const s = c.surfaceAt(x, z).name;
-          const nn = c.normalAt(x, z);
-          if (nn.y < 0.78) tmp.setRGB(T.rock[0] + 0.05 * n, T.rock[1] + 0.05 * n, T.rock[2] + 0.04 * n);
-          else if (s === 'forest') tmp.setRGB(...T.floor(n));
-          else tmp.setRGB(...T.rough(n));
-        }
+        tmp.setRGB(...(y < 3 ? this.theme.low : this._turf(x, z, y)));
+        uvs[k * 2] = x / 6;
+        uvs[k * 2 + 1] = z / 6;
         col[k * 3] = tmp.r;
         col[k * 3 + 1] = tmp.g;
         col[k * 3 + 2] = tmp.b;
@@ -274,10 +314,68 @@ export class CourseScene {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    g.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
     g.setIndex(idx);
     g.computeVertexNormals();
-    this.terrain = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true }));
+    this.terrain = new THREE.Mesh(g, this._groundMaterial(THREE.FrontSide));
     this.scene.add(this.terrain);
+  }
+
+  _groundMaterial(side) {
+    return new THREE.MeshLambertMaterial({ vertexColors: true, side, map: this.turfTex });
+  }
+
+  /**
+   * Ground colour at (x, z) with soft edges between surfaces: fairway with
+   * mowing stripes and a first cut, green with a checker pattern and a fringe,
+   * bunkers with a darker lip, tees, rough and the forest floor. Matches the
+   * physics surfaces (course.surfaceAt) to within about a metre.
+   */
+  _turf(x, z, y) {
+    const T = this.theme;
+    const c = this.course;
+    const n = fbm(x / 40, z / 40, { octaves: 3, seed: 99 });
+    const nz = fbm(x / 9, z / 9, { octaves: 2, seed: 5 }) * 0.04;
+    if (y < 0.4) return T.low;
+    const nn = c.normalAt(x, z);
+    const cor = c.corridor(x, z);
+    const h = cor.hole;
+    const mix = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+    // Rough -> forest floor.
+    const rough = T.rough(n);
+    const roughW = Math.max(h.fairwayHalfWidth, 10) + 22;
+    let col = mix(rough, T.floor(n), smoothstep(roughW - 2, roughW + 4, cor.d));
+    // Fairway with mowing stripes along the hole and a first cut.
+    const fairStart = h.carry ? Math.max(0.8, h.carry[1]) : h.par === 3 ? 0.8 : 0.16;
+    const half = h.par === 3 ? 10 : h.fairwayHalfWidth;
+    const along = cor.s * h.yardage;
+    const sIn = smoothstep(fairStart - 0.012, fairStart + 0.012, cor.s);
+    const fw = smoothstep(half + 0.9, half - 0.9, cor.d) * sIn;
+    const cut = smoothstep(half + 3.2, half + 0.9, cor.d) * sIn;
+    const stripe = smoothstep(-0.25, 0.25, Math.sin((along / 9) * Math.PI));
+    const fairCol = mix(T.fairway[1], T.fairway[0], stripe).map((v) => v + nz);
+    const cutCol = mix(rough, fairCol, 0.55);
+    col = mix(col, cutCol, cut);
+    col = mix(col, fairCol, fw);
+    // Tee box.
+    const dt = Math.hypot(x - h.tee.x, z - h.tee.z);
+    col = mix(col, T.tee, smoothstep(7.4, 6.6, dt));
+    // Green, fringe and checker mowing.
+    const dg = Math.hypot(x - h.green.x, z - h.green.z);
+    const r = h.greenRadius;
+    col = mix(col, T.fringe, smoothstep(r + 2.2, r + 0.4, dg));
+    const checker = smoothstep(-0.2, 0.2, Math.sin(x / 2.2) * Math.sin(z / 2.2));
+    col = mix(col, mix(T.green[1], T.green[0], checker), smoothstep(r + 0.4, r - 0.4, dg));
+    // Bunkers with a darker lip.
+    for (const b of h.bunkers) {
+      const db = Math.hypot(x - b.x, z - b.z);
+      if (db > b.r + 1.2) continue;
+      col = mix(col, mix(T.sand, [0.3, 0.27, 0.2], 0.55), smoothstep(b.r + 1.0, b.r + 0.2, db) * smoothstep(b.r - 0.6, b.r + 0.2, db));
+      col = mix(col, T.sand.map((v) => v + nz * 0.5), smoothstep(b.r + 0.2, b.r - 0.3, db));
+    }
+    // Steep ground shows rock.
+    col = mix(col, [T.rock[0] + 0.05 * n, T.rock[1] + 0.05 * n, T.rock[2] + 0.04 * n], smoothstep(0.8, 0.7, nn.y));
+    return col;
   }
 
   // Fine (2.5 m) mesh along each hole with per-vertex surface colours, so the
@@ -293,6 +391,7 @@ export class CourseScene {
     const across = Math.ceil((2 * half) / step);
     const pos = [];
     const col = [];
+    const uv = [];
     const idx = [];
     const tmp = new THREE.Color();
     const first = dirAt(h.path, 0.001);
@@ -317,20 +416,9 @@ export class CourseScene {
         const x = p.x + d.z * off;
         const z = p.z - d.x * off;
         pos.push(x, c.heightAt(x, z) + 0.02, -z);
-        const surf = c.surfaceAt(x, z).name;
-        const stripe = Math.floor(dist / 12) % 2 === 0;
-        const nz = fbm(x / 9, z / 9, { octaves: 2, seed: 5 }) * 0.04;
-        const T = this.theme;
-        const fw = T.fairway[stripe ? 0 : 1];
-        switch (surf) {
-          case 'fairway': tmp.setRGB(fw[0] + nz, fw[1] + nz, fw[2]); break;
-          case 'green': tmp.setRGB(0.2 + nz * 0.5, 0.52 + nz * 0.5, 0.17); break;
-          case 'tee': tmp.setRGB(0.3, 0.58, 0.2); break;
-          case 'bunker': tmp.setRGB(0.9, 0.84, 0.66); break;
-          case 'rough': tmp.setRGB(T.patchRough[0] + nz, T.patchRough[1] + nz, T.patchRough[2]); break;
-          case 'water': tmp.setRGB(...T.low); break;
-          default: tmp.setRGB(...T.patchFloor(nz));
-        }
+        uv.push(x / 3, z / 3);
+        const y = c.heightAt(x, z);
+        tmp.setRGB(...this._turf(x, z, y));
         col.push(tmp.r, tmp.g, tmp.b);
       }
     }
@@ -346,9 +434,10 @@ export class CourseScene {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
     g.setIndex(idx);
     g.computeVertexNormals();
-    return new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide }));
+    return new THREE.Mesh(g, this._groundMaterial(THREE.DoubleSide));
   }
 
   _buildHoles() {
@@ -390,7 +479,7 @@ export class CourseScene {
     const r = rng(42);
     const { minX, maxX, minZ, maxZ } = c.bounds;
     const items = [];
-    const maxTrees = this.theme.maxTrees;
+    const maxTrees = Math.round(this.theme.maxTrees * ({ high: 1, medium: 0.7, low: 0.4 }[this.quality] ?? 1));
     for (let tries = 0; tries < 60000 && items.length < maxTrees; tries++) {
       const x = minX + r() * (maxX - minX);
       const z = minZ + r() * (maxZ - minZ);
@@ -479,6 +568,17 @@ export class CourseScene {
   _buildBallAndMarkers() {
     this.ball = new THREE.Mesh(new THREE.SphereGeometry(0.09, 18, 12), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.35 }));
     this.scene.add(this.ball);
+    // Soft contact shadow on the ground under the ball (cheap depth cue).
+    const shadowTex = canvasTexture(64, 64, (ctx) => {
+      const g = ctx.createRadialGradient(32, 32, 2, 32, 32, 30);
+      g.addColorStop(0, 'rgba(0,0,0,0.55)');
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, 64, 64);
+    });
+    this.ballShadow = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 0.4), new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false }));
+    this.ballShadow.rotation.x = -Math.PI / 2;
+    this.scene.add(this.ballShadow);
     this.trailGeo = new THREE.BufferGeometry();
     this.trailPos = new Float32Array(3 * 6000);
     this.trailGeo.setAttribute('position', new THREE.BufferAttribute(this.trailPos, 3));
@@ -535,6 +635,7 @@ export class CourseScene {
     this.ball.scale.setScalar(1);
     this.landMarker.visible = false;
     this.ball.position.copy(V(p.x, p.y + 0.09, p.z));
+    this._placeShadow(p.x, p.z, 0);
   }
 
   /** Aim line along a compass heading for `distance` metres (putts: straight line to the pin). */
@@ -632,6 +733,49 @@ export class CourseScene {
     this.running = false;
   }
 
+  _placeShadow(x, z, above) {
+    const gy = this.course.heightAt(x, z);
+    this.ballShadow.position.copy(V(x, Math.max(gy, 0) + 0.03, z));
+    const k = Math.max(0.15, 1 - above / 25);
+    this.ballShadow.scale.setScalar(1 + above / 15);
+    this.ballShadow.material.opacity = k;
+    this.ballShadow.visible = gy > 0;
+  }
+
+  /** World (course) point -> CSS pixels in the canvas, or null if behind the camera. */
+  project(x, y, z) {
+    const v = V(x, y, z).project(this.camera);
+    if (v.z > 1 || v.z < -1) return null;
+    const r = this.renderer.domElement.getBoundingClientRect();
+    return { x: ((v.x + 1) / 2) * r.width, y: ((1 - v.y) / 2) * r.height, w: r.width, h: r.height };
+  }
+
+  /** Orange line over the water the shot has to carry, with its length. */
+  setHazardLine(hz, from) {
+    if (!this.hazardLine) {
+      this.hazardGeo = new THREE.BufferGeometry();
+      this.hazardGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(3 * 40), 3));
+      this.hazardLine = new THREE.Line(this.hazardGeo, new THREE.LineBasicMaterial({ color: 0xff8a3d }));
+      this.hazardLine.frustumCulled = false;
+      this.scene.add(this.hazardLine);
+    }
+    if (!hz) {
+      this.hazardLine.visible = false;
+      return;
+    }
+    // A bar across the line of play at the carry distance (screen-golf style).
+    const pos = this.hazardGeo.attributes.position;
+    const cx = from.x + hz.dx * hz.to;
+    const cz = from.z + hz.dz * hz.to;
+    const y = Math.max(0, this.course.heightAt(cx, cz)) + 0.6;
+    for (let i = 0; i < 40; i++) {
+      const o = -12 + (24 * i) / 39;
+      pos.setXYZ(i, cx + hz.dz * o, y, -(cz - hz.dx * o));
+    }
+    pos.needsUpdate = true;
+    this.hazardLine.visible = true;
+  }
+
   /** Release GPU resources and remove the canvas (used when switching courses). */
   dispose() {
     this.stop();
@@ -656,6 +800,7 @@ export class CourseScene {
     this.time += dt;
     this._update(dt);
     this.renderer.render(this.scene, this.camera);
+    this.onFrame?.();
     requestAnimationFrame(this._loop);
   }
 
@@ -710,6 +855,7 @@ export class CourseScene {
       const k = span > 0 ? Math.min(1, (f.t - a.t) / span) : 1;
       const bp = { x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k, z: a.z + (b.z - a.z) * k };
       this.ball.position.copy(V(bp.x, bp.y + 0.09, bp.z));
+      this._placeShadow(bp.x, bp.z, bp.y - c.heightAt(bp.x, bp.z));
       // Watch the ball like the golfer: stay at eye height behind the ball
       // and turn to follow it; once it is far away, walk the camera after it
       // (still near eye height) so the ball stays large enough to see.
