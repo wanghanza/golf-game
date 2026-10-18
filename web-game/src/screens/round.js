@@ -42,7 +42,6 @@ export function createRoundScreen(app) {
     </div>
     <div class="aim-pad">
       <button data-act="left">◀</button>
-      <span class="aim-read" data-el="aimread"></span>
       <button data-act="pin">핀</button>
       <button data-act="right">▶</button>
     </div>
@@ -106,10 +105,6 @@ export function createRoundScreen(app) {
       <div class="hc-player"><span class="hc-name">PLAYER</span><span class="hc-score ${totals.toPar > 0 ? 'over' : totals.toPar < 0 ? 'under' : ''}">${toPar}</span></div>
       <div class="hc-row">핀까지 <b>${fmtDist(round.distanceToPin)}</b> <small>체감 ${fmtDist(playsLike())}</small> · ${round.strokes + 1}번째 샷</div>
       `;
-    // Aim readout: offset from the pin line.
-    const toPin = headingTo(round.ball, round.pin);
-    const off = ((aim - toPin + 540) % 360) - 180;
-    $(el, '[data-el=aimread]').innerHTML = Math.abs(off) < 0.5 ? '핀 방향<small>조준</small>' : `${off > 0 ? '오른쪽' : '왼쪽'} ${Math.abs(off).toFixed(0)}°<small>핀 기준</small>`;
     hud.el.classList.toggle('near-green', round.distanceToPin < 60);
     const hz = hud.update({ hole, ball: round.ball, pin: round.pin, aim, aimDistance: aimDistance(), club, wind: round.wind(), lie: round.lie });
     scene.setHazardLine(hz, round.ball);
@@ -305,7 +300,8 @@ export function createRoundScreen(app) {
       updateAim();
     }
     if (act === 'pin') {
-      aim = headingTo(round.ball, round.pin);
+      // Back to the initial aim for this shot (pin, or the dogleg corner).
+      aim = club === 'putter' ? round.defaultAim() : round.defaultAim(club);
       updateAim();
     }
     if (act === 'card') {
