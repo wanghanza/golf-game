@@ -63,6 +63,9 @@ export function diagnoseSwing(result, ctx = {}) {
     const sg = (x) => `${x >= 0 ? '+' : ''}${r0(x)}°`;
     const prog = f(result, 'squareProgress');
     rows.push({ label: '페이스 회전', value: `탑 ${sg(fTop)} → 허리 ${sg(fDel)} → 임팩트 ${sg(fImp)}`, status: Number.isFinite(prog) && prog < 0.45 ? 'warn' : Math.abs(fImp) > 8 ? 'warn' : 'ok' });
+    // Bare-hand drill: the trail palm turns backward (opens) in the backswing.
+    if (fTop < 15) rows.push({ label: '백스윙 회전', value: `손바닥 뒤로 젖힘 부족 (${sg(fTop)})`, status: 'warn' });
+    else if (fTop > 100) rows.push({ label: '백스윙 회전', value: `너무 많이 열림 (${sg(fTop)})`, status: 'warn' });
   }
   const lead = f(result, 'dropLeadMs');
   if (Number.isFinite(lead)) {
