@@ -19,6 +19,8 @@ const IDEAL = Object.freeze({
   accelPeakPhase: 0.75,
   transitionRotation: 0.08,
   transitionDropAccel: 2,
+  dropLeadMs: 150,
+  squareProgress: 0.8,
 });
 
 const FACTORS = [
@@ -27,7 +29,8 @@ const FACTORS = [
   { key: 'path', label: '스윙 경로', fields: ['planeShiftDeg'] },
   { key: 'lag', label: '래그 (임팩트 속도 유지)', fields: ['lagRetention'] },
   { key: 'accel', label: '가속 타이밍', fields: ['accelPeakPhase'] },
-  { key: 'transition', label: '탑 전환', fields: ['transitionRotation', 'transitionDropAccel'] },
+  { key: 'transition', label: '탑 전환 (손 먼저 낙하)', fields: ['transitionRotation', 'transitionDropAccel', 'dropLeadMs'] },
+  { key: 'square', label: '페이스 스퀘어 타이밍', fields: ['squareProgress'] },
   { key: 'strike', label: '스윙 완성도', fields: ['qualityScore'] },
 ];
 
@@ -45,6 +48,8 @@ function advice(key, swing, cfg, d) {
       if (d.dCarry < -3) return `스윙 속도가 기준의 ${Math.round((100 * swing.peakOmega) / ref)}%입니다. 다운스윙을 조금 더 빠르게 하세요.`;
       return '';
     case 'face':
+      if (swing.faceRollDeg > 0 && Number.isFinite(swing.squareProgress) && swing.squareProgress < 0.6)
+        return '임팩트 때 화면(페이스)이 열려 있습니다 — 공이 오른쪽으로 갑니다. 탑에서 내려오기 시작할 때 손목을 비틀어(Twist) 허리 높이에서 화면이 목표를 보게(Square) 하세요.';
       return swing.faceRollDeg > 0
         ? '임팩트 때 화면(페이스)이 열려 있습니다 — 공이 오른쪽으로 갑니다. 내려올 때 왼팔뚝을 조금 더 돌려(로테이션) 화면이 목표를 보게 하세요.'
         : '임팩트 때 화면(페이스)이 닫혀 있습니다 — 공이 왼쪽으로 갑니다. 손목을 덜 돌리고 화면이 목표를 보게 유지하세요.';
@@ -59,7 +64,11 @@ function advice(key, swing, cfg, d) {
         ? '다운스윙 초반에 힘을 다 썼습니다(가속이 이름). 처음엔 천천히 내려오다가 공 근처에서 가장 빠르게 하세요.'
         : '가속이 너무 늦어 임팩트에 속도가 다 실리지 않았습니다. 공 조금 전부터 가속을 시작하세요.';
     case 'transition':
-      return '탑에서 바로 클럽을 던졌습니다. 탑에서 잠깐 멈춘 뒤 손이 먼저 아래로 떨어지게(수직 낙하) 하세요.';
+      return Number.isFinite(swing.dropLeadMs) && swing.dropLeadMs < 40
+        ? '몸이 먼저 돌았습니다. 탑에서 몸통을 돌리기 전에 손(손목)이 먼저 수직으로 떨어지게 하세요.'
+        : '탑에서 바로 클럽을 던졌습니다. 탑에서 잠깐 멈춘 뒤 손이 먼저 아래로 떨어지게(수직 낙하) 하세요.';
+    case 'square':
+      return '페이스(화면)를 임팩트 직전에 뒤집어 닫았습니다. 다운스윙 시작에서 손목을 비틀어(Twist) 허리 높이에서 이미 화면이 목표를 보게(Square) 하세요.';
     case 'strike':
       return '스윙 리듬(템포)이나 부드러운 가속이 부족했습니다. 백:다운 시간 약 3:1로, 끊김 없이 휘두르세요.';
     default:
@@ -89,8 +98,11 @@ export function compareToIdeal(swing, club, configOverrides = {}) {
     factors.push({ key: fct.key, label: fct.label, ...d, size });
   }
   factors.sort((a, b) => b.size - a.size);
+  // Technique flags even when this one shot did not suffer much from them.
+  const w = actual.shot.delivery.wrist ?? {};
+  const flagged = { square: (w.lateSquare ?? 0) >= 0.3, transition: (w.steep ?? 0) >= 0.4, accel: (w.early ?? 0) + (w.late ?? 0) >= 0.3 };
   for (const f of factors) {
-    f.hurts = f.dCarry < -3 || Math.abs(f.dLateral) > 3;
+    f.hurts = f.dCarry < -3 || Math.abs(f.dLateral) > 3 || !!flagged[f.key];
     f.advice = f.hurts || (f.key === 'power' && (swing.peakOmega ?? 0) > cfg.referenceOmega * cfg.maxPowerRatio * 1.15) ? advice(f.key, swing, cfg, f) : '';
   }
   return {

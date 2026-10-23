@@ -67,6 +67,8 @@ export function deliveryToLaunch(delivery, clubKey, opts = {}) {
  * @param {number} [swing.accelPeakPhase]  acceleration zone, 0 = top .. 1 = impact (derived)
  * @param {number} [swing.transitionRotation]  share of the backswing angle unwound early in the downswing (derived)
  * @param {number} [swing.transitionDropAccel] mean downward hand acceleration early in the downswing, m/s^2 (derived)
+ * @param {number} [swing.dropLeadMs]      hands start falling this long before the club turns fast (derived)
+ * @param {number} [swing.squareProgress]  share of the face opening closed by hip height in the downswing (estimated)
  */
 export function swingToDelivery(swing, clubKey, configOverrides = {}) {
   const cfg = resolveGameConfig(configOverrides);
@@ -104,6 +106,15 @@ export function swingToDelivery(swing, clubKey, configOverrides = {}) {
     const dropOk = Number.isFinite(swing.transitionDropAccel) ? clamp((swing.transitionDropAccel - dBad) / (dGood - dBad), 0, 1) : 1;
     steep = 1 - rotOk * (0.6 + 0.4 * dropOk);
   }
+  if (cfg.wristModel && Number.isFinite(swing.dropLeadMs)) {
+    const [ok, bad] = cfg.bodyFirstMs;
+    steep = Math.max(steep, clamp((ok - swing.dropLeadMs) / (ok - bad), 0, 1));
+  }
+  // Late squaring of the face (flip at the bottom).
+  let lateSquare = 0;
+  if (cfg.wristModel && Number.isFinite(swing.squareProgress)) {
+    lateSquare = clamp((cfg.squareGood - swing.squareProgress) / cfg.squareLateSpan, 0, 1);
+  }
   const clubSpeed = club.refClubSpeed * level.speedScale * power * lagSpeed;
   const assist = 1 - clamp(cfg.directionAssist, 0, 1);
   const faceRaw = clamp((swing.faceRollDeg ?? 0) * cfg.faceGain, -cfg.faceClampDeg, cfg.faceClampDeg);
@@ -118,9 +129,9 @@ export function swingToDelivery(swing, clubKey, configOverrides = {}) {
     clubPath,
     // Game attack angle: the driver is struck slightly on the way up.
     attackAngle: attackBase - cfg.steepAttackDeg * steep,
-    strikeQuality: clamp(swing.qualityScore ?? 1, 0, 1),
+    strikeQuality: clamp((swing.qualityScore ?? 1) * (1 - cfg.lateSquareStrikeLoss * lateSquare), 0, 1),
     dynamicLoftExtra: cfg.castLoftDeg * early - cfg.lateDeloftDeg * late,
-    wrist: { lagSpeed, early, late, steep },
+    wrist: { lagSpeed, early, late, steep, lateSquare },
   };
 }
 

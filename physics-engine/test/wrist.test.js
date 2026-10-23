@@ -74,3 +74,19 @@ test('compareToIdeal ranks what cost the shot and explains it', async () => {
   assert.equal(sliced.overPower, true);
   assert.ok(sliced.factors.find((f) => f.key === 'power').advice.includes('105%'));
 });
+
+test('late face squaring and body-first transitions are penalised and explained', async () => {
+  const { compareToIdeal } = await import('../src/shot-compare.js');
+  const good = swingToShot({ ...base, squareProgress: 0.8, dropLeadMs: 150 }, 'iron7');
+  const flip = swingToShot({ ...base, squareProgress: 0.25, dropLeadMs: 150 }, 'iron7');
+  const body = swingToShot({ ...base, squareProgress: 0.8, dropLeadMs: -30 }, 'iron7');
+  assert.equal(good.delivery.wrist.lateSquare, 0);
+  assert.equal(flip.delivery.wrist.lateSquare, 1);
+  assert.ok(flip.launch.ballSpeed < good.launch.ballSpeed);
+  assert.equal(body.delivery.wrist.steep, 1);
+  assert.ok(body.delivery.clubPath < good.delivery.clubPath);
+  const c = compareToIdeal({ ...base, faceRollDeg: 10, squareProgress: 0.3, dropLeadMs: -30 }, 'iron7');
+  assert.ok(c.factors.find((x) => x.key === 'square').hurts);
+  assert.ok(c.factors.find((x) => x.key === 'transition').advice.includes('손'));
+  assert.ok(c.factors.find((x) => x.key === 'face').advice.includes('Twist'));
+});

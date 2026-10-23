@@ -55,6 +55,20 @@ export function diagnoseSwing(result, ctx = {}) {
   if (!impactLive && Number.isFinite(dsDeg) && Number.isFinite(need)) impactText = `안 됨 (${r0(dsDeg)}° / 필요 ${r0(need)}°)`;
   rows.push({ label: '임팩트', value: impactText, status: impactLive ? 'ok' : lp.downswingStart != null ? 'bad' : 'na' });
 
+  // Face (phone screen) rotation: open at the top -> hip height -> impact.
+  const fTop = f(result, 'faceRollTopDeg');
+  const fDel = f(result, 'faceRollDeliveryDeg');
+  const fImp = f(result, 'faceRollDeg');
+  if (Number.isFinite(fTop) && Number.isFinite(fDel) && Number.isFinite(fImp)) {
+    const sg = (x) => `${x >= 0 ? '+' : ''}${r0(x)}°`;
+    const prog = f(result, 'squareProgress');
+    rows.push({ label: '페이스 회전', value: `탑 ${sg(fTop)} → 허리 ${sg(fDel)} → 임팩트 ${sg(fImp)}`, status: Number.isFinite(prog) && prog < 0.45 ? 'warn' : Math.abs(fImp) > 8 ? 'warn' : 'ok' });
+  }
+  const lead = f(result, 'dropLeadMs');
+  if (Number.isFinite(lead)) {
+    rows.push({ label: '손 먼저', value: lead >= 40 ? `손이 ${r0(lead)} ms 먼저 낙하` : `몸이 먼저 돎 (${r0(lead)} ms)`, status: lead >= 40 ? 'ok' : 'warn' });
+  }
+
   // Sensor range use.
   const gyroRange = ctx.gyroRange ?? s.gyroRange ?? s.gyroClipLevel;
   const accelRange = ctx.accelRange ?? s.accelRange ?? s.accelClipLevel;

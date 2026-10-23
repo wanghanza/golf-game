@@ -64,6 +64,16 @@ export const DEFAULT_GAME_CONFIG = Object.freeze({
   transitionDrop: [-1, 1.5],
   steepPathDeg: 3,
   steepAttackDeg: 2,
+  // Hands before body: the hands should start falling before the club
+  // turns fast. dropLeadMs at or below bodyFirstMs[1] counts fully as
+  // "body first" (steep), above bodyFirstMs[0] not at all.
+  bodyFirstMs: [40, -20],
+  // Squaring the face: share of the top-of-swing opening already closed at
+  // hip height in the downswing. Below squareGood the face is flipped late,
+  // which makes contact less consistent (strike penalty, game estimate).
+  squareGood: 0.6,
+  squareLateSpan: 0.35,
+  lateSquareStrikeLoss: 0.12,
 });
 
 export function resolveGameConfig(overrides = {}) {
