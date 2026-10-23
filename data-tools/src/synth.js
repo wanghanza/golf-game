@@ -155,6 +155,9 @@ export const SWING_TYPES = Object.freeze({
   cast: { label: '얼리 릴리스 (탑에서 던짐)', peakOmega: 11, releaseK: 1.3, dropDepth: 0 },
   late: { label: '늦은 가속 (임팩트 직전에야 가속)', peakOmega: 11, accelPhase: 0.9 },
   early: { label: '이른 가속 (다운스윙 초반에 힘을 씀)', peakOmega: 11, accelPhase: 0.4 },
+  flip: { label: '늦은 페이스 닫힘 (임팩트 직전 손목 뒤집기)', peakOmega: 11, squareTiming: 0.45, faceOpenTopDeg: 60 },
+  open: { label: '비틀지 않음 (페이스 열린 채 임팩트)', peakOmega: 11, squareTiming: 0.8, faceRollDeg: 16, faceOpenTopDeg: 60 },
+  bodyfirst: { label: '몸이 먼저 돎 (손이 떨어지기 전에 회전)', peakOmega: 11, accelPhase: 0.5, dropDepth: 0, transitionOmega: 0.3 },
   roll: { label: '빠른 손목 로테이션', peakOmega: 11, rollClosure: 0.9 },
   hold: { label: '로테이션 억제 (홀딩)', peakOmega: 11, rollClosure: -0.15 },
   half: { label: '하프 스윙', peakOmega: 8, faceRollDeg: 0, planeShiftDeg: 0, topDeg: 110, finishDeg: 120 },
@@ -263,7 +266,7 @@ export function generateSwing(p = {}) {
   const truth = { addressEnd: tAddr, top: null, impact: null, peakOmegaTime: null, forearmRollDeg: o.faceRollDeg ?? 0, faceTwistDeg: null, planeShiftDeg: o.planeShiftDeg ?? 0 };
   let peakW = 0;
   const fine = [];
-  const phiTop = 40 * DEG;
+  const phiTop = (o.faceOpenTopDeg ?? 40) * DEG;
   const faceT = (o.faceRollDeg ?? 0) * DEG;
   for (let i = 0; i <= steps; i++) {
     const t = i * dt;
@@ -274,7 +277,9 @@ export function generateSwing(p = {}) {
     // Forearm roll as a function of swing progress.
     let phi;
     if (!pastTop) phi = thTop > 0 ? phiTop * Math.min(1, -theta / thTop) : 0;
-    else if (theta <= 0) phi = faceT + (phiTop - faceT) * (-theta / thTop);
+    // Squaring the face in the downswing: squareTiming > 1 closes early (the
+    // drill: twist at the start, square by hip height), < 1 flips late.
+    else if (theta <= 0) phi = faceT + (phiTop - faceT) * Math.pow(Math.max(0, -theta / thTop), o.squareTiming ?? 2);
     else phi = faceT - (o.rollClosure ?? 0.3) * theta; // forearm rotation closing the face after impact
     if (o.shake) phi = 0;
     const phiRate = i === 0 ? 0 : (phi - prevPhi) / dt;

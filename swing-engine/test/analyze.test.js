@@ -368,3 +368,20 @@ test('diagnosis: launched swing, incomplete swing and live rejections explain th
   assert.equal(rej.ok, false);
   assert.ok(rej.rows[0].value.includes('22°'));
 });
+
+test('face rotation: squared by hip height vs late flip vs never twisted; hands before body', () => {
+  const f = (type) => featureValues(analyzeSwing(generateSwing({ type, seed: 2 }).samples));
+  const normal = f('normal');
+  const flip = f('flip');
+  const open = f('open');
+  const body = f('bodyfirst');
+  // Opened in the backswing.
+  for (const x of [normal, flip, open]) assert.ok(x.faceRollTopDeg > 25, `top ${x.faceRollTopDeg}`);
+  // Drill: square by hip height.
+  assert.ok(normal.squareProgress > 0.65 && Math.abs(normal.faceRollDeg) < 3);
+  assert.ok(flip.squareProgress < 0.45, `flip ${flip.squareProgress}`);
+  assert.ok(open.faceRollDeg > 10, `open at impact ${open.faceRollDeg}`);
+  // Hands fall well before the club turns fast in a good swing; not when the body leads.
+  assert.ok(normal.dropLeadMs > 100, `normal lead ${normal.dropLeadMs}`);
+  assert.ok(body.dropLeadMs < 40, `body-first lead ${body.dropLeadMs}`);
+});

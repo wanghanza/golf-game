@@ -17,6 +17,8 @@ export function swingFromFeatures(f) {
     accelPeakPhase: f.accelPeakPhase,
     transitionRotation: f.transitionRotation,
     transitionDropAccel: f.transitionDropAccel,
+    dropLeadMs: f.dropLeadMs,
+    squareProgress: f.squareProgress,
   };
 }
 
@@ -25,7 +27,7 @@ export function wristText(wrist, faceAngle = 0) {
   if (!wrist) return '';
   const tr = wrist.steep >= 0.5 ? '탑에서 던짐(가파름)' : wrist.steep >= 0.2 ? '전환 약간 급함' : '자연스러운 낙하';
   const acc = wrist.early >= 0.3 ? '가속 이름(캐스팅)' : wrist.late >= 0.3 ? '가속 늦음' : '가속 타이밍 좋음';
-  const face = faceAngle < -1 ? '페이스 닫힘' : faceAngle > 1 ? '페이스 열림' : '페이스 스퀘어';
+  const face = wrist.lateSquare >= 0.3 ? '페이스 늦게 닫힘(플립)' : faceAngle < -1 ? '페이스 닫힘' : faceAngle > 1 ? '페이스 열림' : '페이스 스퀘어';
   return `${tr} · ${acc} · ${face}`;
 }
 

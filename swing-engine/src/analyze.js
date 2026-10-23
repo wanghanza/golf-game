@@ -322,6 +322,44 @@ export function analyzeSwing(samples, options = {}) {
   }
   const transitionDropAccel = dropSum / (winEnd - topIdx);
   const transitionRotation = theta[topIdx] < 0 ? (theta[winEnd] - theta[topIdx]) / -theta[topIdx] : 0;
+
+  // Hands before body: the hands should start falling before the club
+  // starts turning fast. Drop onset = downward hand acceleration > 1 m/s^2
+  // held for 15 ms; rotation onset = in-plane omega above 30% of the peak.
+  let dropOnset = null;
+  let run = 0;
+  for (let i = topIdx; i < impactIdx; i++) {
+    const aw = quat.rotate(qs[i], [F.ax[i], F.ay[i], F.az[i]]);
+    run = G - aw[2] > 1 ? run + 1 : 0;
+    if (run >= Math.max(2, Math.round(0.015 * fs))) {
+      dropOnset = F.t[i - run + 1];
+      break;
+    }
+  }
+  let rotOnset = F.t[impactIdx];
+  for (let i = topIdx; i < impactIdx; i++) {
+    if (wp[i] > 0.3 * wp[dsPeakIdx]) {
+      rotOnset = F.t[i];
+      break;
+    }
+  }
+  const dropLeadMs = dropOnset === null ? null : (rotOnset - dropOnset) * 1000;
+
+  // Face rotation through the swing (phone roll about its long axis relative
+  // to address, + = open): opened in the backswing, it should be squared
+  // early in the downswing ("twist" at the start, square by hip height)
+  // rather than flipped closed at the last moment.
+  const rollAt = (i) => quat.twistAngle(quat.mul(quat.conj(q0), qs[i]), cfg.longAxis) * RAD2DEG;
+  const faceRollTopDeg = rollAt(topIdx);
+  const deliveryTheta = -Math.min(Math.PI / 2, 0.45 * -theta[topIdx]);
+  let deliveryIdx = impactIdx;
+  for (let i = topIdx + 1; i <= impactIdx; i++) {
+    if (theta[i] >= deliveryTheta) {
+      deliveryIdx = i;
+      break;
+    }
+  }
+  const faceRollDeliveryDeg = rollAt(deliveryIdx);
   const alphaHalf = Math.max(1, Math.round(0.01 * fs));
   let alphaPeak = -Infinity;
   let alphaIdx = topIdx;
@@ -427,6 +465,10 @@ export function analyzeSwing(samples, options = {}) {
     forearmRollRate: feat(forearmRollRate, 'rad/s', 'derived', '임팩트 시 전완 회전 속도 (+ 페이스 닫힘)'),
     transitionDropAccel: feat(transitionDropAccel, 'm/s^2', 'derived', '다운스윙 초반 아래 방향 가속도 평균 (수직 낙하)'),
     transitionRotation: feat(transitionRotation, 'ratio', 'derived', '다운스윙 초반에 이미 풀린 백스윙 각 비율'),
+    dropLeadMs: feat(dropLeadMs ?? NaN, 'ms', 'derived', '손이 떨어지기 시작한 뒤 회전이 빨라지기까지 (+ = 손 먼저)'),
+    faceRollTopDeg: feat(faceRollTopDeg, 'deg', 'estimated', '탑에서 페이스(화면) 열림'),
+    faceRollDeliveryDeg: feat(faceRollDeliveryDeg, 'deg', 'estimated', '다운스윙 허리 높이에서 페이스 열림'),
+    squareProgress: feat(Math.abs(faceRollTopDeg - faceRollDeg) > 8 ? (faceRollTopDeg - faceRollDeliveryDeg) / (faceRollTopDeg - faceRollDeg) : NaN, 'ratio', 'estimated', '허리 높이까지 닫힌 비율 (1 = 이미 스퀘어)'),
     accelPeakPhase: feat(accelPeakPhase, 'ratio', 'derived', '가속 구간 중심: 회전 에너지가 가장 빨리 늘어난 시점 (0 = 탑, 1 = 임팩트)'),
     accelPeakMs: feat(accelPeakMs, 'ms', 'derived', '가속 구간 중심: 임팩트 몇 ms 전'),
     planeShiftDeg: feat(planeShiftDeg, 'deg', 'estimated', '백스윙 대비 다운스윙 평면 방위 변화 (경로 추정용, 미검증)'),

@@ -77,7 +77,9 @@ export function createDiagPanel(root) {
       const side = (m) => (Math.abs(m) < 0.5 ? '0' : `${m > 0 ? 'R' : 'L'} ${fd(Math.abs(m))}`);
       const top = c.factors.filter((f) => f.hurts).slice(0, 3);
       // Most costly fault first, then the power note (if any).
-      const tips = [...c.factors.filter((f) => f.hurts && f.advice), ...c.factors.filter((f) => !f.hurts && f.advice)].slice(0, 2);
+      const all = [...c.factors.filter((f) => f.hurts && f.advice), ...c.factors.filter((f) => !f.hurts && f.advice)];
+      // One Twist/Square tip is enough.
+      const tips = all.filter((f, i) => !(f.key === 'square' && all.slice(0, i).some((g) => g.advice.includes('Twist')))).slice(0, 2);
       onCalibrate = opts.calibrate?.apply ?? null;
       cmpEl.innerHTML = `
         <div class="diag-cmp-h">가상 스윙(이상적) 대비</div>
@@ -97,7 +99,7 @@ export function createDiagPanel(root) {
       card.innerHTML = `
         <div class="diag-title">${d.ok ? '✓' : '✗'} ${esc(d.title)} <small>${time}</small></div>
         ${d.detail ? `<div class="diag-detail">${esc(d.detail)}</div>` : ''}
-        <ul class="diag-rows">${(d.ok ? d.rows.filter((r) => r.status === 'warn' || r.status === 'bad') : d.rows).map((r) => `<li class="${r.status}"><i>${ICON[r.status] ?? ''}</i><span>${esc(r.label)}</span><b>${esc(r.value)}</b></li>`).join('')}</ul>
+        <ul class="diag-rows">${(d.ok ? d.rows.filter((r) => r.status === 'warn' || r.status === 'bad' || r.label === '페이스 회전') : d.rows).map((r) => `<li class="${r.status}"><i>${ICON[r.status] ?? ''}</i><span>${esc(r.label)}</span><b>${esc(r.value)}</b></li>`).join('')}</ul>
         ${d.tip ? `<div class="diag-tip">💡 ${esc(d.tip)}</div>` : ''}`;
       history.unshift({ time, ok: d.ok, text: d.ok ? d.title : d.detail || d.title });
       history.length = Math.min(history.length, 6);
